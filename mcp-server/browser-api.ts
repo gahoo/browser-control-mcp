@@ -3,6 +3,7 @@ import type {
   ExtensionMessage,
   BrowserTab,
   BrowserHistoryItem,
+  BrowserTabGroup,
   ServerMessage,
   TabContentExtensionMessage,
   ServerMessageRequest,
@@ -160,9 +161,10 @@ export class BrowserAPI {
 
   async groupTabs(
     tabIds: number[],
-    isCollapsed: boolean,
-    groupColor: string,
-    groupTitle: string
+    isCollapsed?: boolean,
+    groupColor?: string,
+    groupTitle?: string,
+    groupId?: number
   ): Promise<number> {
     const correlationId = this.sendMessageToExtension({
       cmd: "group-tabs",
@@ -170,9 +172,28 @@ export class BrowserAPI {
       isCollapsed,
       groupColor,
       groupTitle,
+      groupId,
     });
     const message = await this.waitForResponse(correlationId, "new-tab-group");
     return message.groupId;
+  }
+
+  async getTabGroups(): Promise<BrowserTabGroup[]> {
+    const correlationId = this.sendMessageToExtension({
+      cmd: "get-tab-groups",
+    });
+    const message = await this.waitForResponse(correlationId, "tab-groups");
+    return message.groups;
+  }
+
+  async queryTabs(title?: string, url?: string): Promise<BrowserTab[]> {
+    const correlationId = this.sendMessageToExtension({
+      cmd: "query-tabs",
+      title,
+      url,
+    });
+    const message = await this.waitForResponse(correlationId, "tabs");
+    return message.tabs;
   }
 
   private createSignature(payload: string): string {

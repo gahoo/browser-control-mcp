@@ -31,6 +31,11 @@ export const AVAILABLE_TOOLS: ToolInfo[] = [
     description: "Allows the MCP server to get a list of all open tabs"
   },
   {
+    id: "query-open-tabs",
+    name: "Query Open Tabs",
+    description: "Allows the MCP server to search/filter open tabs by title or URL"
+  },
+  {
     id: "get-recent-browser-history",
     name: "Get Recent Browser History",
     description: "Allows the MCP server to access your recent browsing history"
@@ -49,6 +54,11 @@ export const AVAILABLE_TOOLS: ToolInfo[] = [
     id: "find-highlight-in-browser-tab",
     name: "Find and Highlight in Browser Tab",
     description: "Allows the MCP server to search for and highlight text in web pages"
+  },
+  {
+    id: "get-browser-tab-groups",
+    name: "Get Browser Tab Groups",
+    description: "Allows the MCP server to get a list of existing tab groups"
   }
 ];
 
@@ -57,11 +67,13 @@ export const COMMAND_TO_TOOL_ID: Record<ServerMessageRequest["cmd"], string> = {
   "open-tab": "open-browser-tab",
   "close-tabs": "close-browser-tabs",
   "get-tab-list": "get-list-of-open-tabs",
+  "query-tabs": "query-open-tabs",
   "get-browser-recent-history": "get-recent-browser-history",
   "get-tab-content": "get-tab-web-content",
   "reorder-tabs": "reorder-browser-tabs",
   "find-highlight": "find-highlight-in-browser-tab",
   "group-tabs": "reorder-browser-tabs",
+  "get-tab-groups": "get-browser-tab-groups",
 };
 
 // Storage schema for tool settings
@@ -104,7 +116,7 @@ export function getDefaultToolSettings(): ToolSettings {
 export async function getConfig(): Promise<ExtensionConfig> {
   const configObj = await browser.storage.local.get("config");
   const config: ExtensionConfig = configObj.config || { secret: "" };
-  
+
   // Initialize toolSettings if it doesn't exist
   if (!config.toolSettings) {
     config.toolSettings = getDefaultToolSettings();
@@ -113,7 +125,7 @@ export async function getConfig(): Promise<ExtensionConfig> {
   if (!config.ports) {
     config.ports = [DEFAULT_WS_PORT];
   }
-  
+
   return config;
 }
 
@@ -179,13 +191,13 @@ export async function isCommandAllowed(command: ServerMessageRequest["cmd"]): Pr
  */
 export async function setToolEnabled(toolId: string, enabled: boolean): Promise<void> {
   const config = await getConfig();
-  
+
   // Update the setting
   if (!config.toolSettings) {
     config.toolSettings = getDefaultToolSettings();
   }
   config.toolSettings[toolId] = enabled;
-  
+
   // Save back to storage
   await saveConfig(config);
 }
@@ -229,13 +241,13 @@ export async function isDomainInDenyList(url: string): Promise<boolean> {
     // Extract the domain from the URL
     const urlObj = new URL(url);
     const domain = urlObj.hostname;
-    
+
     // Get the deny list
     const denyList = await getDomainDenyList();
-    
+
     // Check if the domain is in the deny list
-    return denyList.some(deniedDomain => 
-      domain.toLowerCase() === deniedDomain.toLowerCase() || 
+    return denyList.some(deniedDomain =>
+      domain.toLowerCase() === deniedDomain.toLowerCase() ||
       domain.toLowerCase().endsWith(`.${deniedDomain.toLowerCase()}`)
     );
   } catch (error) {
@@ -272,19 +284,19 @@ export async function setPorts(ports: number[]): Promise<void> {
  */
 export async function addAuditLogEntry(entry: AuditLogEntry): Promise<void> {
   const config = await getConfig();
-  
+
   if (!config.auditLog) {
     config.auditLog = [];
   }
-  
+
   // Add the new entry at the beginning
   config.auditLog.unshift(entry);
-  
+
   // Keep only the last AUDIT_LOG_SIZE_LIMIT entries
   if (config.auditLog.length > AUDIT_LOG_SIZE_LIMIT) {
     config.auditLog = config.auditLog.slice(0, AUDIT_LOG_SIZE_LIMIT);
   }
-  
+
   await saveConfig(config);
 }
 

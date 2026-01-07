@@ -41,9 +41,20 @@ export interface FindHighlightServerMessage extends ServerMessageBase {
 export interface GroupTabsServerMessage extends ServerMessageBase {
   cmd: "group-tabs";
   tabIds: number[];
-  isCollapsed: boolean;
-  groupColor: string;
-  groupTitle: string;
+  isCollapsed?: boolean;
+  groupColor?: string;
+  groupTitle?: string;
+  groupId?: number;
+}
+
+export interface GetTabGroupsServerMessage extends ServerMessageBase {
+  cmd: "get-tab-groups";
+}
+
+export interface QueryTabsServerMessage extends ServerMessageBase {
+  cmd: "query-tabs";
+  title?: string;
+  url?: string;
 }
 
 export type ServerMessage =
@@ -54,6 +65,8 @@ export type ServerMessage =
   | GetTabContentServerMessage
   | ReorderTabsServerMessage
   | FindHighlightServerMessage
-  | GroupTabsServerMessage;
+  | GroupTabsServerMessage
+  | GetTabGroupsServerMessage
+  | QueryTabsServerMessage;
 
 export type ServerMessageRequest = ServerMessage & { correlationId: string };

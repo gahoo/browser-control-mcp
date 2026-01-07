@@ -60,6 +60,18 @@ export interface TabGroupCreatedExtensionMessage extends ExtensionMessageBase {
   groupId: number;
 }
 
+export interface BrowserTabGroup {
+  id: number;
+  title?: string;
+  color?: string;
+  collapsed?: boolean;
+}
+
+export interface TabGroupsExtensionMessage extends ExtensionMessageBase {
+  resource: "tab-groups";
+  groups: BrowserTabGroup[];
+}
+
 export type ExtensionMessage =
   | TabContentExtensionMessage
   | TabsExtensionMessage
@@ -68,7 +80,8 @@ export type ExtensionMessage =
   | ReorderedTabsExtensionMessage
   | FindHighlightExtensionMessage
   | TabsClosedExtensionMessage
-  | TabGroupCreatedExtensionMessage;
+  | TabGroupCreatedExtensionMessage
+  | TabGroupsExtensionMessage;
 
 export interface ExtensionError {
   correlationId: string;

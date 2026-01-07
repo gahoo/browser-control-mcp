@@ -50,9 +50,16 @@ export class MessageHandler {
           req.correlationId,
           req.tabIds,
           req.isCollapsed,
-          req.groupColor as browser.tabGroups.Color,
-          req.groupTitle
+          req.groupColor as browser.tabGroups.Color | undefined,
+          req.groupTitle,
+          req.groupId
         );
+        break;
+      case "get-tab-groups":
+        await this.sendTabGroups(req.correlationId);
+        break;
+      case "query-tabs":
+        await this.queryTabs(req.correlationId, req.title, req.url);
         break;
       default:
         const _exhaustiveCheck: never = req;
@@ -82,7 +89,7 @@ export class MessageHandler {
       timestamp: Date.now(),
       url: contextUrl
     };
-    
+
     await addAuditLogEntry(auditEntry);
   }
 
@@ -305,24 +312,77 @@ export class MessageHandler {
   private async groupTabs(
     correlationId: string,
     tabIds: number[],
-    isCollapsed: boolean,
-    groupColor: browser.tabGroups.Color,
-    groupTitle: string
+    isCollapsed?: boolean,
+    groupColor?: browser.tabGroups.Color,
+    groupTitle?: string,
+    existingGroupId?: number
   ): Promise<void> {
-    const groupId = await browser.tabs.group({
-      tabIds,
-    });
+    let groupId: number;
 
-    let tabGroup = await browser.tabGroups.update(groupId, {
-      collapsed: isCollapsed,
-      color: groupColor,
-      title: groupTitle,
-    });
+    if (existingGroupId !== undefined) {
+      // Add tabs to an existing group
+      groupId = await browser.tabs.group({
+        tabIds,
+        groupId: existingGroupId,
+      });
+    } else {
+      // Create a new group
+      groupId = await browser.tabs.group({
+        tabIds,
+      });
+    }
+
+    // Only update group properties if we created a new group or properties are specified
+    if (existingGroupId === undefined || isCollapsed !== undefined || groupColor !== undefined || groupTitle !== undefined) {
+      const updateOptions: browser.tabGroups._UpdateUpdateInfo = {};
+      if (isCollapsed !== undefined) updateOptions.collapsed = isCollapsed;
+      if (groupColor !== undefined) updateOptions.color = groupColor;
+      if (groupTitle !== undefined) updateOptions.title = groupTitle;
+
+      if (Object.keys(updateOptions).length > 0) {
+        await browser.tabGroups.update(groupId, updateOptions);
+      }
+    }
 
     await this.client.sendResourceToServer({
       resource: "new-tab-group",
       correlationId,
-      groupId: tabGroup.id,
+      groupId,
+    });
+  }
+
+  private async sendTabGroups(correlationId: string): Promise<void> {
+    const groups = await browser.tabGroups.query({});
+    await this.client.sendResourceToServer({
+      resource: "tab-groups",
+      correlationId,
+      groups: groups.map((g) => ({
+        id: g.id,
+        title: g.title,
+        color: g.color,
+        collapsed: g.collapsed,
+      })),
+    });
+  }
+
+  private async queryTabs(
+    correlationId: string,
+    title?: string,
+    url?: string
+  ): Promise<void> {
+    const allTabs = await browser.tabs.query({});
+    const filtered = allTabs.filter((t) => {
+      const matchTitle =
+        !title ||
+        (t.title && t.title.toLowerCase().includes(title.toLowerCase()));
+      const matchUrl =
+        !url || (t.url && t.url.toLowerCase().includes(url.toLowerCase()));
+      return matchTitle && matchUrl;
+    });
+    await this.client.sendResourceToServer({
+      resource: "tabs",
+      correlationId,
+      tabs: filtered,
     });
   }
 }

@@ -196,10 +196,11 @@ mcpServer.tool(
 
 mcpServer.tool(
   "group-browser-tabs",
-  "Organize opened browser tabs in a new tab group",
+  "Organize opened browser tabs in a tab group. If groupId is provided, tabs will be added to that existing group; otherwise a new group will be created.",
   {
-    tabIds: z.array(z.number()),
-    isCollapsed: z.boolean().default(false),
+    tabIds: z.array(z.number()).describe("Array of tab IDs to group"),
+    groupId: z.number().optional().describe("Optional existing group ID to add tabs to"),
+    isCollapsed: z.boolean().optional().default(false).describe("Whether the group should be collapsed"),
     groupColor: z
       .enum([
         "grey",
@@ -212,23 +213,76 @@ mcpServer.tool(
         "cyan",
         "orange",
       ])
-      .default("grey"),
-    groupTitle: z.string().default("New Group"),
+      .optional()
+      .default("grey")
+      .describe("Color of the tab group"),
+    groupTitle: z.string().optional().default("New Group").describe("Title of the tab group"),
   },
-  async ({ tabIds, isCollapsed, groupColor, groupTitle }) => {
-    const groupId = await browserApi.groupTabs(
+  async ({ tabIds, groupId, isCollapsed, groupColor, groupTitle }) => {
+    const resultGroupId = await browserApi.groupTabs(
       tabIds,
       isCollapsed,
       groupColor,
-      groupTitle
+      groupTitle,
+      groupId
     );
+    const action = groupId !== undefined ? "Added to" : "Created";
     return {
       content: [
         {
           type: "text",
-          text: `Created tab group "${groupTitle}" with ${tabIds.length} tabs (group ID: ${groupId})`,
+          text: `${action} tab group "${groupTitle}" with ${tabIds.length} tabs (group ID: ${resultGroupId})`,
         },
       ],
+    };
+  }
+);
+
+mcpServer.tool(
+  "get-browser-tab-groups",
+  "Get the list of existing tab groups in the user's browser",
+  {},
+  async () => {
+    const groups = await browserApi.getTabGroups();
+    if (groups.length === 0) {
+      return {
+        content: [{ type: "text", text: "No tab groups found" }],
+      };
+    }
+    return {
+      content: groups.map((group) => ({
+        type: "text" as const,
+        text: `group id=${group.id}, title="${group.title || "(untitled)"}", color=${group.color || "grey"}, collapsed=${group.collapsed || false}`,
+      })),
+    };
+  }
+);
+
+mcpServer.tool(
+  "query-open-tabs",
+  "Search/filter open tabs by title and/or URL. Uses case-insensitive substring matching.",
+  {
+    title: z.string().optional().describe("Filter tabs whose title contains this string (case-insensitive)"),
+    url: z.string().optional().describe("Filter tabs whose URL contains this string (case-insensitive)"),
+  },
+  async ({ title, url }) => {
+    const matchingTabs = await browserApi.queryTabs(title, url);
+    if (matchingTabs.length === 0) {
+      return {
+        content: [{ type: "text", text: "No matching tabs found" }],
+      };
+    }
+    return {
+      content: matchingTabs.map((tab) => {
+        let lastAccessed = "unknown";
+        if (tab.lastAccessed) {
+          lastAccessed = dayjs(tab.lastAccessed).fromNow();
+        }
+        return {
+          type: "text" as const,
+          text: `tab id=${tab.id}, tab url=${tab.url}, tab title=${tab.title}, last accessed=${lastAccessed}`,
+        };
+      }),
     };
   }
 );
