@@ -189,12 +189,28 @@ export class BrowserAPI {
     return message.groups;
   }
 
-  async queryTabs(title?: string, url?: string, groupId?: number): Promise<BrowserTab[]> {
+  async queryTabs(
+    title?: string,
+    url?: string,
+    groupId?: number,
+    active?: boolean,
+    currentWindow?: boolean,
+    pinned?: boolean,
+    audible?: boolean,
+    muted?: boolean,
+    status?: "loading" | "complete"
+  ): Promise<BrowserTab[]> {
     const correlationId = this.sendMessageToExtension({
       cmd: "query-tabs",
       title,
       url,
       groupId,
+      active,
+      currentWindow,
+      pinned,
+      audible,
+      muted,
+      status,
     });
     const message = await this.waitForResponse(correlationId, "tabs");
     return message.tabs;

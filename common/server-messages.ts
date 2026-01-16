@@ -56,6 +56,12 @@ export interface QueryTabsServerMessage extends ServerMessageBase {
   title?: string;
   url?: string;
   groupId?: number;
+  active?: boolean;
+  currentWindow?: boolean;
+  pinned?: boolean;
+  audible?: boolean;
+  muted?: boolean;
+  status?: "loading" | "complete";
 }
 
 export interface GetClickableElementsServerMessage extends ServerMessageBase {

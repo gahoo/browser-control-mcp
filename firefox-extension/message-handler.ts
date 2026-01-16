@@ -59,7 +59,18 @@ export class MessageHandler {
         await this.sendTabGroups(req.correlationId);
         break;
       case "query-tabs":
-        await this.queryTabs(req.correlationId, req.title, req.url, req.groupId);
+        await this.queryTabs(
+          req.correlationId,
+          req.title,
+          req.url,
+          req.groupId,
+          req.active,
+          req.currentWindow,
+          req.pinned,
+          req.audible,
+          req.muted,
+          req.status
+        );
         break;
       case "get-clickable-elements":
         await this.getClickableElements(req.correlationId, req.tabId, req.selector);
@@ -381,9 +392,26 @@ export class MessageHandler {
     correlationId: string,
     title?: string,
     url?: string,
-    groupId?: number
+    groupId?: number,
+    active?: boolean,
+    currentWindow?: boolean,
+    pinned?: boolean,
+    audible?: boolean,
+    muted?: boolean,
+    status?: "loading" | "complete"
   ): Promise<void> {
-    const allTabs = await browser.tabs.query({});
+    // Build query object for browser.tabs.query
+    const queryInfo: any = {};
+    if (active !== undefined) queryInfo.active = active;
+    if (currentWindow !== undefined) queryInfo.currentWindow = currentWindow;
+    if (pinned !== undefined) queryInfo.pinned = pinned;
+    if (audible !== undefined) queryInfo.audible = audible;
+    if (muted !== undefined) queryInfo.muted = muted;
+    if (status !== undefined) queryInfo.status = status;
+
+    const allTabs = await browser.tabs.query(queryInfo);
+
+    // Additional filtering for title, url, groupId (substring match)
     const filtered = allTabs.filter((t: any) => {
       const matchTitle =
         !title ||

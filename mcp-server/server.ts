@@ -260,14 +260,22 @@ mcpServer.tool(
 
 mcpServer.tool(
   "query-open-tabs",
-  "Search/filter open tabs by title, URL, or group ID. Uses case-insensitive substring matching for text fields.",
+  "Search/filter open tabs with flexible query options. Use 'active: true, currentWindow: true' to get the current tab.",
   {
     title: z.string().optional().describe("Filter tabs whose title contains this string (case-insensitive)"),
     url: z.string().optional().describe("Filter tabs whose URL contains this string (case-insensitive)"),
     groupId: z.number().optional().describe("Filter tabs belonging to this group ID"),
+    active: z.boolean().optional().describe("True = only active tab in each window"),
+    currentWindow: z.boolean().optional().describe("True = only tabs in the current window"),
+    pinned: z.boolean().optional().describe("True = pinned tabs only, false = unpinned only"),
+    audible: z.boolean().optional().describe("True = tabs currently playing audio"),
+    muted: z.boolean().optional().describe("True = muted tabs only"),
+    status: z.enum(["loading", "complete"]).optional().describe("Filter by page load status"),
   },
-  async ({ title, url, groupId }) => {
-    const matchingTabs = await browserApi.queryTabs(title, url, groupId);
+  async ({ title, url, groupId, active, currentWindow, pinned, audible, muted, status }) => {
+    const matchingTabs = await browserApi.queryTabs(
+      title, url, groupId, active, currentWindow, pinned, audible, muted, status
+    );
     if (matchingTabs.length === 0) {
       return {
         content: [{ type: "text", text: "No matching tabs found" }],
