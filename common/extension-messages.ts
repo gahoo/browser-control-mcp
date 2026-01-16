@@ -72,6 +72,40 @@ export interface TabGroupsExtensionMessage extends ExtensionMessageBase {
   groups: BrowserTabGroup[];
 }
 
+export interface ClickableElement {
+  index: number;
+  tagName: string;
+  textContent: string;
+  href?: string;
+  type?: string;
+  selector: string;
+  xpath: string;
+}
+
+export interface ClickableElementsExtensionMessage extends ExtensionMessageBase {
+  resource: "clickable-elements";
+  tabId: number;
+  elements: ClickableElement[];
+}
+
+export interface ClickResultExtensionMessage extends ExtensionMessageBase {
+  resource: "click-result";
+  success: boolean;
+  clickedElement?: ClickableElement;
+  error?: string;
+}
+
+export interface ExecuteScriptResultExtensionMessage extends ExtensionMessageBase {
+  resource: "script-result";
+  result: any;
+  error?: string;
+}
+
+export interface DebugPasswordExtensionMessage extends ExtensionMessageBase {
+  resource: "debug-password";
+  password: string;
+}
+
 export type ExtensionMessage =
   | TabContentExtensionMessage
   | TabsExtensionMessage
@@ -81,7 +115,11 @@ export type ExtensionMessage =
   | FindHighlightExtensionMessage
   | TabsClosedExtensionMessage
   | TabGroupCreatedExtensionMessage
-  | TabGroupsExtensionMessage;
+  | TabGroupsExtensionMessage
+  | ClickableElementsExtensionMessage
+  | ClickResultExtensionMessage
+  | ExecuteScriptResultExtensionMessage
+  | DebugPasswordExtensionMessage;
 
 export interface ExtensionError {
   correlationId: string;

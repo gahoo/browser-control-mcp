@@ -55,6 +55,33 @@ export interface QueryTabsServerMessage extends ServerMessageBase {
   cmd: "query-tabs";
   title?: string;
   url?: string;
+  groupId?: number;
+}
+
+export interface GetClickableElementsServerMessage extends ServerMessageBase {
+  cmd: "get-clickable-elements";
+  tabId: number;
+  selector?: string;
+}
+
+export interface ClickElementServerMessage extends ServerMessageBase {
+  cmd: "click-element";
+  tabId: number;
+  textContent?: string;
+  selector?: string;
+  xpath?: string;
+  index?: number;
+}
+
+export interface ExecuteScriptServerMessage extends ServerMessageBase {
+  cmd: "execute-script";
+  tabId: number;
+  script: string;
+  password: string;
+}
+
+export interface GetDebugPasswordServerMessage extends ServerMessageBase {
+  cmd: "get-debug-password";
 }
 
 export type ServerMessage =
@@ -67,6 +94,10 @@ export type ServerMessage =
   | FindHighlightServerMessage
   | GroupTabsServerMessage
   | GetTabGroupsServerMessage
-  | QueryTabsServerMessage;
+  | QueryTabsServerMessage
+  | GetClickableElementsServerMessage
+  | ClickElementServerMessage
+  | ExecuteScriptServerMessage
+  | GetDebugPasswordServerMessage;
 
 export type ServerMessageRequest = ServerMessage & { correlationId: string };

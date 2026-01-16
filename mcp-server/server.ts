@@ -260,13 +260,14 @@ mcpServer.tool(
 
 mcpServer.tool(
   "query-open-tabs",
-  "Search/filter open tabs by title and/or URL. Uses case-insensitive substring matching.",
+  "Search/filter open tabs by title, URL, or group ID. Uses case-insensitive substring matching for text fields.",
   {
     title: z.string().optional().describe("Filter tabs whose title contains this string (case-insensitive)"),
     url: z.string().optional().describe("Filter tabs whose URL contains this string (case-insensitive)"),
+    groupId: z.number().optional().describe("Filter tabs belonging to this group ID"),
   },
-  async ({ title, url }) => {
-    const matchingTabs = await browserApi.queryTabs(title, url);
+  async ({ title, url, groupId }) => {
+    const matchingTabs = await browserApi.queryTabs(title, url, groupId);
     if (matchingTabs.length === 0) {
       return {
         content: [{ type: "text", text: "No matching tabs found" }],
@@ -283,6 +284,95 @@ mcpServer.tool(
           text: `tab id=${tab.id}, tab url=${tab.url}, tab title=${tab.title}, last accessed=${lastAccessed}`,
         };
       }),
+    };
+  }
+);
+
+mcpServer.tool(
+  "get-clickable-elements",
+  "Get a list of clickable elements (links and buttons) on a web page. Returns textContent, CSS selector, and XPath for each element.",
+  {
+    tabId: z.number().describe("Tab ID to get clickable elements from"),
+    selector: z.string().optional().describe("Optional CSS selector to filter elements"),
+  },
+  async ({ tabId, selector }) => {
+    const elements = await browserApi.getClickableElements(tabId, selector);
+    if (elements.length === 0) {
+      return {
+        content: [{ type: "text", text: "No clickable elements found" }],
+      };
+    }
+    return {
+      content: elements.map((el) => ({
+        type: "text" as const,
+        text: `[${el.index}] <${el.tagName}> "${el.textContent}"${el.href ? ` href="${el.href}"` : ""} selector="${el.selector}" xpath="${el.xpath}"`,
+      })),
+    };
+  }
+);
+
+mcpServer.tool(
+  "click-element",
+  "Click an element on a web page. Supports matching by textContent (partial match), CSS selector, or XPath. Use index when multiple elements match.",
+  {
+    tabId: z.number().describe("Tab ID containing the element to click"),
+    textContent: z.string().optional().describe("Click element containing this text (partial match)"),
+    selector: z.string().optional().describe("CSS selector to match the element"),
+    xpath: z.string().optional().describe("XPath expression to match the element"),
+    index: z.number().optional().describe("Index when multiple elements match (0-based, defaults to 0)"),
+  },
+  async ({ tabId, textContent, selector, xpath, index }) => {
+    const result = await browserApi.clickElement(tabId, { textContent, selector, xpath, index });
+    if (result.success && result.clickedElement) {
+      return {
+        content: [{
+          type: "text",
+          text: `Clicked: <${result.clickedElement.tagName}> "${result.clickedElement.textContent}"${result.clickedElement.href ? ` (navigating to ${result.clickedElement.href})` : ""}`,
+        }],
+      };
+    } else {
+      return {
+        content: [{ type: "text", text: result.error || "Failed to click element", isError: true }],
+      };
+    }
+  }
+);
+
+mcpServer.tool(
+  "execute-script",
+  "Execute arbitrary JavaScript code on a web page. Requires a debug password obtained from the get-debug-password tool. Password is consumed after successful use.",
+  {
+    tabId: z.number().describe("Tab ID to execute script in"),
+    script: z.string().describe("JavaScript code to execute"),
+    password: z.string().describe("Debug password from get-debug-password tool"),
+  },
+  async ({ tabId, script, password }) => {
+    const result = await browserApi.executeScript(tabId, script, password);
+    if (result.error) {
+      return {
+        content: [{ type: "text", text: `Error: ${result.error}`, isError: true }],
+      };
+    }
+    return {
+      content: [{
+        type: "text",
+        text: `Script executed. Result: ${JSON.stringify(result.result)}`,
+      }],
+    };
+  }
+);
+
+mcpServer.tool(
+  "get-debug-password",
+  "Get the debug password required for execute-script tool. The password is consumed after each successful script execution.",
+  {},
+  async () => {
+    const password = await browserApi.getDebugPassword();
+    return {
+      content: [{
+        type: "text",
+        text: `Debug password: ${password}`,
+      }],
     };
   }
 );

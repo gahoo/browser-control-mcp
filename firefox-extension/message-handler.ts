@@ -1,6 +1,6 @@
 import type { ServerMessageRequest } from "@browser-control-mcp/common";
 import { WebsocketClient } from "./client";
-import { isCommandAllowed, isDomainInDenyList, COMMAND_TO_TOOL_ID, addAuditLogEntry } from "./extension-config";
+import { isCommandAllowed, isDomainInDenyList, COMMAND_TO_TOOL_ID, addAuditLogEntry, getDebugPassword, validateAndConsumeDebugPassword } from "./extension-config";
 
 export class MessageHandler {
   private client: WebsocketClient;
@@ -59,7 +59,19 @@ export class MessageHandler {
         await this.sendTabGroups(req.correlationId);
         break;
       case "query-tabs":
-        await this.queryTabs(req.correlationId, req.title, req.url);
+        await this.queryTabs(req.correlationId, req.title, req.url, req.groupId);
+        break;
+      case "get-clickable-elements":
+        await this.getClickableElements(req.correlationId, req.tabId, req.selector);
+        break;
+      case "click-element":
+        await this.clickElement(req.correlationId, req.tabId, req.textContent, req.selector, req.xpath, req.index);
+        break;
+      case "execute-script":
+        await this.executeScript(req.correlationId, req.tabId, req.script, req.password);
+        break;
+      case "get-debug-password":
+        await this.sendDebugPassword(req.correlationId);
         break;
       default:
         const _exhaustiveCheck: never = req;
@@ -334,7 +346,7 @@ export class MessageHandler {
 
     // Only update group properties if we created a new group or properties are specified
     if (existingGroupId === undefined || isCollapsed !== undefined || groupColor !== undefined || groupTitle !== undefined) {
-      const updateOptions: browser.tabGroups._UpdateUpdateInfo = {};
+      const updateOptions: browser.tabGroups.UpdateUpdateInfo = {};
       if (isCollapsed !== undefined) updateOptions.collapsed = isCollapsed;
       if (groupColor !== undefined) updateOptions.color = groupColor;
       if (groupTitle !== undefined) updateOptions.title = groupTitle;
@@ -368,21 +380,289 @@ export class MessageHandler {
   private async queryTabs(
     correlationId: string,
     title?: string,
-    url?: string
+    url?: string,
+    groupId?: number
   ): Promise<void> {
     const allTabs = await browser.tabs.query({});
-    const filtered = allTabs.filter((t) => {
+    const filtered = allTabs.filter((t: any) => {
       const matchTitle =
         !title ||
         (t.title && t.title.toLowerCase().includes(title.toLowerCase()));
       const matchUrl =
         !url || (t.url && t.url.toLowerCase().includes(url.toLowerCase()));
-      return matchTitle && matchUrl;
+      const matchGroup =
+        groupId === undefined || (t.groupId !== undefined && t.groupId === groupId);
+      return matchTitle && matchUrl && matchGroup;
     });
     await this.client.sendResourceToServer({
       resource: "tabs",
       correlationId,
       tabs: filtered,
+    });
+  }
+
+  private async getClickableElements(
+    correlationId: string,
+    tabId: number,
+    selector?: string
+  ): Promise<void> {
+    const tab = await browser.tabs.get(tabId);
+    if (tab.url && (await isDomainInDenyList(tab.url))) {
+      throw new Error(`Domain in tab URL is in the deny list`);
+    }
+
+    await this.checkForUrlPermission(tab.url);
+
+    const results = await browser.tabs.executeScript(tabId, {
+      code: `
+      (function() {
+        const selectorFilter = ${JSON.stringify(selector || null)};
+        
+        function getUniqueSelector(el) {
+          if (el.id) return '#' + CSS.escape(el.id);
+          
+          let path = [];
+          while (el && el.nodeType === Node.ELEMENT_NODE) {
+            let selector = el.nodeName.toLowerCase();
+            if (el.id) {
+              selector = '#' + CSS.escape(el.id);
+              path.unshift(selector);
+              break;
+            } else {
+              let sib = el, nth = 1;
+              while (sib = sib.previousElementSibling) {
+                if (sib.nodeName.toLowerCase() === selector) nth++;
+              }
+              if (nth !== 1) selector += ':nth-of-type(' + nth + ')';
+            }
+            path.unshift(selector);
+            el = el.parentNode;
+          }
+          return path.join(' > ');
+        }
+        
+        function getXPath(el) {
+          if (el.id) return '//*[@id="' + el.id + '"]';
+          
+          let path = [];
+          while (el && el.nodeType === Node.ELEMENT_NODE) {
+            let idx = 0;
+            let sibling = el.previousSibling;
+            while (sibling) {
+              if (sibling.nodeType === Node.ELEMENT_NODE && sibling.nodeName === el.nodeName) idx++;
+              sibling = sibling.previousSibling;
+            }
+            let tagName = el.nodeName.toLowerCase();
+            let pathIndex = idx ? '[' + (idx + 1) + ']' : '';
+            path.unshift(tagName + pathIndex);
+            el = el.parentNode;
+          }
+          return '/' + path.join('/');
+        }
+        
+        const clickableSelectors = 'a[href], button, input[type="button"], input[type="submit"], [role="button"], [onclick]';
+        const baseSelector = selectorFilter ? selectorFilter + ', ' + selectorFilter + ' ' + clickableSelectors : clickableSelectors;
+        const elements = document.querySelectorAll(selectorFilter || clickableSelectors);
+        
+        return Array.from(elements).map((el, index) => ({
+          index,
+          tagName: el.tagName.toLowerCase(),
+          textContent: (el.textContent || '').trim().substring(0, 100),
+          href: el.href || undefined,
+          type: el.type || undefined,
+          selector: getUniqueSelector(el),
+          xpath: getXPath(el)
+        })).filter(el => el.textContent || el.href);
+      })();
+      `,
+    });
+
+    await this.client.sendResourceToServer({
+      resource: "clickable-elements",
+      correlationId,
+      tabId,
+      elements: results[0] || [],
+    });
+  }
+
+  private async clickElement(
+    correlationId: string,
+    tabId: number,
+    textContent?: string,
+    selector?: string,
+    xpath?: string,
+    index?: number
+  ): Promise<void> {
+    const tab = await browser.tabs.get(tabId);
+    if (tab.url && (await isDomainInDenyList(tab.url))) {
+      throw new Error(`Domain in tab URL is in the deny list`);
+    }
+
+    await this.checkForUrlPermission(tab.url);
+
+    const results = await browser.tabs.executeScript(tabId, {
+      code: `
+      (function() {
+        const textContent = ${JSON.stringify(textContent || null)};
+        const selector = ${JSON.stringify(selector || null)};
+        const xpath = ${JSON.stringify(xpath || null)};
+        const targetIndex = ${JSON.stringify(index ?? null)};
+        
+        function getUniqueSelector(el) {
+          if (el.id) return '#' + CSS.escape(el.id);
+          let path = [];
+          while (el && el.nodeType === Node.ELEMENT_NODE) {
+            let selector = el.nodeName.toLowerCase();
+            if (el.id) {
+              selector = '#' + CSS.escape(el.id);
+              path.unshift(selector);
+              break;
+            } else {
+              let sib = el, nth = 1;
+              while (sib = sib.previousElementSibling) {
+                if (sib.nodeName.toLowerCase() === selector) nth++;
+              }
+              if (nth !== 1) selector += ':nth-of-type(' + nth + ')';
+            }
+            path.unshift(selector);
+            el = el.parentNode;
+          }
+          return path.join(' > ');
+        }
+        
+        function getXPath(el) {
+          if (el.id) return '//*[@id="' + el.id + '"]';
+          let path = [];
+          while (el && el.nodeType === Node.ELEMENT_NODE) {
+            let idx = 0;
+            let sibling = el.previousSibling;
+            while (sibling) {
+              if (sibling.nodeType === Node.ELEMENT_NODE && sibling.nodeName === el.nodeName) idx++;
+              sibling = sibling.previousSibling;
+            }
+            let tagName = el.nodeName.toLowerCase();
+            let pathIndex = idx ? '[' + (idx + 1) + ']' : '';
+            path.unshift(tagName + pathIndex);
+            el = el.parentNode;
+          }
+          return '/' + path.join('/');
+        }
+        
+        let elements = [];
+        
+        if (xpath) {
+          const result = document.evaluate(xpath, document, null, XPathResult.ORDERED_NODE_SNAPSHOT_TYPE, null);
+          for (let i = 0; i < result.snapshotLength; i++) {
+            elements.push(result.snapshotItem(i));
+          }
+        } else if (selector) {
+          elements = Array.from(document.querySelectorAll(selector));
+        } else if (textContent) {
+          const clickableSelectors = 'a[href], button, input[type="button"], input[type="submit"], [role="button"], [onclick]';
+          const allClickable = document.querySelectorAll(clickableSelectors);
+          elements = Array.from(allClickable).filter(el => 
+            (el.textContent || '').toLowerCase().includes(textContent.toLowerCase())
+          );
+        }
+        
+        if (elements.length === 0) {
+          return { success: false, error: 'No matching elements found' };
+        }
+        
+        const targetEl = targetIndex !== null ? elements[targetIndex] : elements[0];
+        if (!targetEl) {
+          return { success: false, error: 'Element at index ' + targetIndex + ' not found. Found ' + elements.length + ' elements.' };
+        }
+        
+        targetEl.click();
+        
+        return {
+          success: true,
+          clickedElement: {
+            index: targetIndex !== null ? targetIndex : 0,
+            tagName: targetEl.tagName.toLowerCase(),
+            textContent: (targetEl.textContent || '').trim().substring(0, 100),
+            href: targetEl.href || undefined,
+            type: targetEl.type || undefined,
+            selector: getUniqueSelector(targetEl),
+            xpath: getXPath(targetEl)
+          }
+        };
+      })();
+      `,
+    });
+
+    const result = results[0];
+    await this.client.sendResourceToServer({
+      resource: "click-result",
+      correlationId,
+      success: result.success,
+      clickedElement: result.clickedElement,
+      error: result.error,
+    });
+  }
+
+  private async executeScript(
+    correlationId: string,
+    tabId: number,
+    script: string,
+    password: string
+  ): Promise<void> {
+    // Validate password first
+    if (!validateAndConsumeDebugPassword(password)) {
+      await this.client.sendResourceToServer({
+        resource: "script-result",
+        correlationId,
+        result: null,
+        error: "Invalid or expired debug password",
+      });
+      return;
+    }
+
+    const tab = await browser.tabs.get(tabId);
+    if (tab.url && (await isDomainInDenyList(tab.url))) {
+      throw new Error(`Domain in tab URL is in the deny list`);
+    }
+
+    await this.checkForUrlPermission(tab.url);
+
+    try {
+      const results = await browser.tabs.executeScript(tabId, {
+        code: `
+        (function() {
+          try {
+            const result = eval(${JSON.stringify(script)});
+            return { result: result, error: null };
+          } catch (e) {
+            return { result: null, error: e.message };
+          }
+        })();
+        `,
+      });
+
+      const result = results[0];
+      await this.client.sendResourceToServer({
+        resource: "script-result",
+        correlationId,
+        result: result.result,
+        error: result.error,
+      });
+    } catch (error: any) {
+      await this.client.sendResourceToServer({
+        resource: "script-result",
+        correlationId,
+        result: null,
+        error: error.message,
+      });
+    }
+  }
+
+  private async sendDebugPassword(correlationId: string): Promise<void> {
+    const password = getDebugPassword();
+    await this.client.sendResourceToServer({
+      resource: "debug-password",
+      correlationId,
+      password,
     });
   }
 }

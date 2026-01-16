@@ -8,6 +8,9 @@ import type {
   TabContentExtensionMessage,
   ServerMessageRequest,
   ExtensionError,
+  ClickableElement,
+  ClickResultExtensionMessage,
+  ExecuteScriptResultExtensionMessage,
 } from "@browser-control-mcp/common";
 import { isPortInUse } from "./util";
 import * as crypto from "crypto";
@@ -186,14 +189,65 @@ export class BrowserAPI {
     return message.groups;
   }
 
-  async queryTabs(title?: string, url?: string): Promise<BrowserTab[]> {
+  async queryTabs(title?: string, url?: string, groupId?: number): Promise<BrowserTab[]> {
     const correlationId = this.sendMessageToExtension({
       cmd: "query-tabs",
       title,
       url,
+      groupId,
     });
     const message = await this.waitForResponse(correlationId, "tabs");
     return message.tabs;
+  }
+
+  async getClickableElements(
+    tabId: number,
+    selector?: string
+  ): Promise<ClickableElement[]> {
+    const correlationId = this.sendMessageToExtension({
+      cmd: "get-clickable-elements",
+      tabId,
+      selector,
+    });
+    const message = await this.waitForResponse(correlationId, "clickable-elements");
+    return message.elements;
+  }
+
+  async clickElement(
+    tabId: number,
+    options: { textContent?: string; selector?: string; xpath?: string; index?: number }
+  ): Promise<ClickResultExtensionMessage> {
+    const correlationId = this.sendMessageToExtension({
+      cmd: "click-element",
+      tabId,
+      textContent: options.textContent,
+      selector: options.selector,
+      xpath: options.xpath,
+      index: options.index,
+    });
+    return await this.waitForResponse(correlationId, "click-result");
+  }
+
+  async executeScript(
+    tabId: number,
+    script: string,
+    password: string
+  ): Promise<ExecuteScriptResultExtensionMessage> {
+    const correlationId = this.sendMessageToExtension({
+      cmd: "execute-script",
+      tabId,
+      script,
+      password,
+    });
+    return await this.waitForResponse(correlationId, "script-result");
+  }
+
+  async getDebugPassword(): Promise<string> {
+    const correlationId = this.sendMessageToExtension({
+      cmd: "get-debug-password",
+    });
+    const message = await this.waitForResponse(correlationId, "debug-password");
+    return message.password;
   }
 
   private createSignature(payload: string): string {
