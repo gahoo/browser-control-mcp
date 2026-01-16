@@ -202,8 +202,15 @@ export function convertToMarkdown(html: string, baseUrl: string): string {
         replacement: (content) => `==${content}==`
     });
 
-    // Process URLs first
-    const processedHtml = processUrls(html, new URL(baseUrl));
+    // Process URLs first (with validation)
+    let processedHtml = html;
+    try {
+        if (baseUrl) {
+            processedHtml = processUrls(html, new URL(baseUrl));
+        }
+    } catch {
+        console.warn('Invalid baseUrl, skipping URL processing:', baseUrl);
+    }
 
     // Basic cleanup
     turndownService.remove(['style', 'script', 'button', 'noscript']);

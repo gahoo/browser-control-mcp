@@ -5,10 +5,11 @@
 
 /**
  * Process HTML content and convert relative URLs to absolute URLs
+ * Uses negative lookahead to skip URLs that are already absolute (have a scheme)
  */
 export function processUrls(html: string, baseUrl: URL): string {
-    // Process href attributes
-    html = html.replace(/href="([^"]+)"/g, (match, url) => {
+    // Process href attributes (skip absolute URLs with scheme like http:, https:, mailto:, etc.)
+    html = html.replace(/href="(?![a-z][a-z0-9+.-]*:)([^"]+)"/gi, (match, url) => {
         try {
             const absoluteUrl = new URL(url, baseUrl).href;
             return `href="${absoluteUrl}"`;
@@ -17,8 +18,8 @@ export function processUrls(html: string, baseUrl: URL): string {
         }
     });
 
-    // Process src attributes
-    html = html.replace(/src="([^"]+)"/g, (match, url) => {
+    // Process src attributes (skip absolute URLs)
+    html = html.replace(/src="(?![a-z][a-z0-9+.-]*:)([^"]+)"/gi, (match, url) => {
         try {
             const absoluteUrl = new URL(url, baseUrl).href;
             return `src="${absoluteUrl}"`;
@@ -34,7 +35,7 @@ export function processUrls(html: string, baseUrl: URL): string {
                 .split(',')
                 .map((entry: string) => {
                     const parts = entry.trim().split(/\s+/);
-                    if (parts.length >= 1) {
+                    if (parts.length >= 1 && !/^[a-z][a-z0-9+.-]*:/i.test(parts[0])) {
                         try {
                             parts[0] = new URL(parts[0], baseUrl).href;
                         } catch {
@@ -51,27 +52,4 @@ export function processUrls(html: string, baseUrl: URL): string {
     });
 
     return html;
-}
-
-/**
- * Extract domain from URL
- */
-export function getDomain(url: string): string {
-    try {
-        return new URL(url).hostname;
-    } catch {
-        return '';
-    }
-}
-
-/**
- * Check if URL is valid
- */
-export function isValidUrl(url: string): boolean {
-    try {
-        new URL(url);
-        return true;
-    } catch {
-        return false;
-    }
 }
