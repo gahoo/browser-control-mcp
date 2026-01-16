@@ -88,6 +88,9 @@ export class MessageHandler {
       case "get-tab-markdown-content":
         await this.sendMarkdownContent(req.correlationId, req.tabId, req.options);
         break;
+      case "reload-tab":
+        await this.reloadTab(req.correlationId, req.tabId, req.bypassCache);
+        break;
       default:
         const _exhaustiveCheck: never = req;
         console.error("Invalid message received:", req);
@@ -755,6 +758,24 @@ export class MessageHandler {
         statistics,
       },
       isTruncated,
+    });
+  }
+
+  private async reloadTab(
+    correlationId: string,
+    tabId: number,
+    bypassCache?: boolean
+  ): Promise<void> {
+    const tab = await browser.tabs.get(tabId);
+    if (tab.url && (await isDomainInDenyList(tab.url))) {
+      throw new Error(`Domain in tab URL is in the deny list`);
+    }
+
+    await browser.tabs.reload(tabId, { bypassCache: bypassCache || false });
+    await this.client.sendResourceToServer({
+      resource: "tab-reloaded",
+      correlationId,
+      tabId,
     });
   }
 }

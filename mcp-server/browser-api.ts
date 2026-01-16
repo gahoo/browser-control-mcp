@@ -279,6 +279,15 @@ export class BrowserAPI {
     return message.password;
   }
 
+  async reloadTab(tabId: number, bypassCache?: boolean): Promise<void> {
+    const correlationId = this.sendMessageToExtension({
+      cmd: "reload-tab",
+      tabId,
+      bypassCache,
+    });
+    await this.waitForResponse(correlationId, "tab-reloaded");
+  }
+
   private createSignature(payload: string): string {
     if (!this.sharedSecret) {
       throw new Error("Shared secret not initialized");

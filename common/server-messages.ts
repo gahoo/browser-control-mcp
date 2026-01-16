@@ -98,6 +98,12 @@ export interface GetDebugPasswordServerMessage extends ServerMessageBase {
   cmd: "get-debug-password";
 }
 
+export interface ReloadTabServerMessage extends ServerMessageBase {
+  cmd: "reload-tab";
+  tabId: number;
+  bypassCache?: boolean;
+}
+
 export type ServerMessage =
   | OpenTabServerMessage
   | CloseTabsServerMessage
@@ -113,6 +119,7 @@ export type ServerMessage =
   | ClickElementServerMessage
   | ExecuteScriptServerMessage
   | GetTabMarkdownContentServerMessage
-  | GetDebugPasswordServerMessage;
+  | GetDebugPasswordServerMessage
+  | ReloadTabServerMessage;
 
 export type ServerMessageRequest = ServerMessage & { correlationId: string };

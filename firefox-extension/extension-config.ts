@@ -79,6 +79,11 @@ export const AVAILABLE_TOOLS: ToolInfo[] = [
     id: "get-tab-markdown-content",
     name: "Get Tab Markdown Content",
     description: "Allows the MCP server to extract clean, LLM-friendly content as Markdown"
+  },
+  {
+    id: "reload-browser-tab",
+    name: "Reload Browser Tab",
+    description: "Allows the MCP server to reload/refresh browser tabs"
   }
 ];
 
@@ -99,6 +104,7 @@ export const COMMAND_TO_TOOL_ID: Record<ServerMessageRequest["cmd"], string> = {
   "execute-script": "execute-script",
   "get-debug-password": "execute-script",
   "get-tab-markdown-content": "get-tab-markdown-content",
+  "reload-tab": "reload-browser-tab",
 };
 
 // Storage schema for tool settings

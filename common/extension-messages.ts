@@ -128,6 +128,11 @@ export interface MarkdownContentExtensionMessage extends ExtensionMessageBase {
   isTruncated: boolean;
 }
 
+export interface TabReloadedExtensionMessage extends ExtensionMessageBase {
+  resource: "tab-reloaded";
+  tabId: number;
+}
+
 export type ExtensionMessage =
   | TabContentExtensionMessage
   | TabsExtensionMessage
@@ -142,7 +147,8 @@ export type ExtensionMessage =
   | ClickResultExtensionMessage
   | ExecuteScriptResultExtensionMessage
   | MarkdownContentExtensionMessage
-  | DebugPasswordExtensionMessage;
+  | DebugPasswordExtensionMessage
+  | TabReloadedExtensionMessage;
 
 export interface ExtensionError {
   correlationId: string;

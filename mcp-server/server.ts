@@ -426,6 +426,26 @@ mcpServer.tool(
   }
 );
 
+mcpServer.tool(
+  "reload-browser-tab",
+  "Reload/refresh a browser tab by tab ID. Useful for refreshing page content after changes or when content needs to be updated.",
+  {
+    tabId: z.number().describe("Tab ID to reload"),
+    bypassCache: z.boolean().optional().default(false).describe("If true, bypass the browser cache and force reload from server"),
+  },
+  async ({ tabId, bypassCache }) => {
+    await browserApi.reloadTab(tabId, bypassCache);
+    return {
+      content: [
+        {
+          type: "text",
+          text: `Tab ${tabId} reloaded successfully${bypassCache ? " (cache bypassed)" : ""}`,
+        },
+      ],
+    };
+  }
+);
+
 const browserApi = new BrowserAPI();
 browserApi.init().catch((err) => {
   console.error("Browser API init error", err);
