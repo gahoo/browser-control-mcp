@@ -385,6 +385,47 @@ mcpServer.tool(
   }
 );
 
+mcpServer.tool(
+  "get-tab-markdown-content",
+  `Get clean, LLM-friendly Markdown content from a webpage. Uses Defuddle to extract 
+   the main content (removing clutter like ads, navigation, etc.) and returns structured 
+   Markdown with metadata (author, date, etc). 
+   
+   Best for: news articles, blog posts, documentation pages.
+   Alternative: use 'get-tab-web-content' for raw text without formatting.`,
+  {
+    tabId: z.number().describe("Tab ID to extract content from"),
+    maxLength: z
+      .number()
+      .optional()
+      .describe("Max content length (default: 100000)"),
+  },
+  async ({ tabId, maxLength }) => {
+    const result = await browserApi.getMarkdownContent(tabId, { maxLength });
+
+    const { markdown, metadata, statistics } = result.content;
+
+    return {
+      content: [
+        {
+          type: "text",
+          text:
+            `# ${metadata.title}\n\n` +
+            `**Author:** ${metadata.author || "Unknown"} | ` +
+            `**Published:** ${metadata.publishedDate || "Unknown"} | ` +
+            `**Domain:** ${metadata.domain}\n\n` +
+            `---\n\n` +
+            markdown +
+            `\n\n---\n\n` +
+            `**Statistics:** ${statistics.wordCount} words, ` +
+            `parsed in ${statistics.parseTimeMs}ms` +
+            (result.isTruncated ? " (content truncated)" : ""),
+        },
+      ],
+    };
+  }
+);
+
 const browserApi = new BrowserAPI();
 browserApi.init().catch((err) => {
   console.error("Browser API init error", err);

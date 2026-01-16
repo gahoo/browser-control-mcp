@@ -1,6 +1,7 @@
 import type { ServerMessageRequest } from "@browser-control-mcp/common";
 import { WebsocketClient } from "./client";
 import { isCommandAllowed, isDomainInDenyList, COMMAND_TO_TOOL_ID, addAuditLogEntry, getDebugPassword, validateAndConsumeDebugPassword } from "./extension-config";
+import { convertToMarkdown } from "./utils/markdown-converter";
 
 export class MessageHandler {
   private client: WebsocketClient;
@@ -83,6 +84,9 @@ export class MessageHandler {
         break;
       case "get-debug-password":
         await this.sendDebugPassword(req.correlationId);
+        break;
+      case "get-tab-markdown-content":
+        await this.sendMarkdownContent(req.correlationId, req.tabId, req.options);
         break;
       default:
         const _exhaustiveCheck: never = req;
@@ -691,6 +695,66 @@ export class MessageHandler {
       resource: "debug-password",
       correlationId,
       password,
+    });
+  }
+
+  private async sendMarkdownContent(
+    correlationId: string,
+    tabId: number,
+    options?: { maxLength?: number }
+  ): Promise<void> {
+    const tab = await browser.tabs.get(tabId);
+    if (tab.url && (await isDomainInDenyList(tab.url))) {
+      throw new Error(`Domain in tab URL is in the deny list`);
+    }
+
+    await this.checkForUrlPermission(tab.url);
+
+    // Clear any previous result and execute the extractor script
+    await browser.tabs.executeScript(tabId, { code: "window.__extractionResult = undefined;" });
+    await browser.tabs.executeScript(tabId, { file: "dist/extractor.js" });
+
+    // Retrieve the result from the global variable
+    const results = await browser.tabs.executeScript(tabId, {
+      code: "window.__extractionResult",
+    });
+
+    if (!results || results.length === 0) {
+      throw new Error(`Content extraction failed: executeScript returned no results.`);
+    }
+
+    const result = results[0];
+    if (!result) {
+      throw new Error(`Content extraction failed: The extraction script did not set a result.`);
+    }
+
+    if (result.error) {
+      throw new Error(`Content extraction failed: ${result.error}`);
+    }
+
+    const { cleanedHtml, metadata, statistics } = result;
+
+    // Convert to Markdown
+    let markdown = convertToMarkdown(cleanedHtml, tab.url || "");
+
+    // Apply length limit
+    let isTruncated = false;
+    const maxLength = options?.maxLength || 100000;
+    if (markdown.length > maxLength) {
+      markdown = markdown.substring(0, maxLength);
+      isTruncated = true;
+    }
+
+    await this.client.sendResourceToServer({
+      resource: "markdown-content",
+      correlationId,
+      tabId,
+      content: {
+        markdown,
+        metadata,
+        statistics,
+      },
+      isTruncated,
     });
   }
 }

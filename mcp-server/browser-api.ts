@@ -11,6 +11,7 @@ import type {
   ClickableElement,
   ClickResultExtensionMessage,
   ExecuteScriptResultExtensionMessage,
+  MarkdownContentExtensionMessage,
 } from "@browser-control-mcp/common";
 import { isPortInUse } from "./util";
 import * as crypto from "crypto";
@@ -138,6 +139,18 @@ export class BrowserAPI {
       offset,
     });
     return await this.waitForResponse(correlationId, "tab-content");
+  }
+
+  async getMarkdownContent(
+    tabId: number,
+    options?: { maxLength?: number }
+  ): Promise<MarkdownContentExtensionMessage> {
+    const correlationId = this.sendMessageToExtension({
+      cmd: "get-tab-markdown-content",
+      tabId,
+      options,
+    });
+    return await this.waitForResponse(correlationId, "markdown-content");
   }
 
   async reorderTabs(tabOrder: number[]): Promise<number[]> {

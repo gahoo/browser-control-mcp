@@ -86,6 +86,14 @@ export interface ExecuteScriptServerMessage extends ServerMessageBase {
   password: string;
 }
 
+export interface GetTabMarkdownContentServerMessage extends ServerMessageBase {
+  cmd: "get-tab-markdown-content";
+  tabId: number;
+  options?: {
+    maxLength?: number;
+  };
+}
+
 export interface GetDebugPasswordServerMessage extends ServerMessageBase {
   cmd: "get-debug-password";
 }
@@ -104,6 +112,7 @@ export type ServerMessage =
   | GetClickableElementsServerMessage
   | ClickElementServerMessage
   | ExecuteScriptServerMessage
+  | GetTabMarkdownContentServerMessage
   | GetDebugPasswordServerMessage;
 
 export type ServerMessageRequest = ServerMessage & { correlationId: string };

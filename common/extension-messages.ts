@@ -106,6 +106,28 @@ export interface DebugPasswordExtensionMessage extends ExtensionMessageBase {
   password: string;
 }
 
+export interface MarkdownContentExtensionMessage extends ExtensionMessageBase {
+  resource: "markdown-content";
+  tabId: number;
+  content: {
+    markdown: string;
+    metadata: {
+      title: string;
+      author?: string;
+      description?: string;
+      publishedDate?: string;
+      domain: string;
+      url: string;
+      siteName?: string;
+    };
+    statistics: {
+      wordCount: number;
+      parseTimeMs: number;
+    };
+  };
+  isTruncated: boolean;
+}
+
 export type ExtensionMessage =
   | TabContentExtensionMessage
   | TabsExtensionMessage
@@ -119,6 +141,7 @@ export type ExtensionMessage =
   | ClickableElementsExtensionMessage
   | ClickResultExtensionMessage
   | ExecuteScriptResultExtensionMessage
+  | MarkdownContentExtensionMessage
   | DebugPasswordExtensionMessage;
 
 export interface ExtensionError {

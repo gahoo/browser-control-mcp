@@ -74,6 +74,11 @@ export const AVAILABLE_TOOLS: ToolInfo[] = [
     id: "execute-script",
     name: "Execute Script",
     description: "Allows the MCP server to execute arbitrary JavaScript (requires password)"
+  },
+  {
+    id: "get-tab-markdown-content",
+    name: "Get Tab Markdown Content",
+    description: "Allows the MCP server to extract clean, LLM-friendly content as Markdown"
   }
 ];
 
@@ -93,6 +98,7 @@ export const COMMAND_TO_TOOL_ID: Record<ServerMessageRequest["cmd"], string> = {
   "click-element": "click-element",
   "execute-script": "execute-script",
   "get-debug-password": "execute-script",
+  "get-tab-markdown-content": "get-tab-markdown-content",
 };
 
 // Storage schema for tool settings
