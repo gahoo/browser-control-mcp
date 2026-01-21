@@ -312,15 +312,16 @@ export class BrowserAPI {
 
   async getTabMediaResources(
     tabId: number,
+    flush?: boolean,
     filter?: {
       types?: ("video" | "audio" | "image" | "stream")[];
       urlPattern?: string;
-      shouldClear?: boolean;
     }
   ): Promise<InterceptedMediaResourcesExtensionMessage> {
     const correlationId = this.sendMessageToExtension({
       cmd: "get-tab-media-resources",
       tabId,
+      flush,
       filter,
     });
     return await this.waitForResponse(correlationId, "intercepted-media-resources");

@@ -448,12 +448,19 @@ mcpServer.tool(
 
 mcpServer.tool(
   "install-media-interceptor",
-  "Install the media interception script into a browser tab. This prepares the tab for capturing media (video/audio/streams). You can configure strategies and filtering.",
+  `Install media interception hooks into a browser tab to capture video, audio, and streaming resources.
+
+IMPORTANT: Call this BEFORE the page loads media content for best results.
+- strategies: APIs to hook (fetch, xhr, dom, mse). Default: all
+- autoReload: Reload page to capture early requests. Only useful for fetch/xhr/mse, not needed for dom-only
+- urlPattern: Filter by URL substring during capture
+
+After installing, use get-tab-media-resources to retrieve captured URLs.`,
   {
     tabId: z.number().describe("Tab ID to install interceptor in"),
-    autoReload: z.boolean().optional().default(false).describe("Reload page to capture early resources (document_start)"),
+    autoReload: z.boolean().optional().default(false).describe("Reload page for early capture. Only useful for fetch/xhr/mse strategies"),
     waitAfterReload: z.number().optional().default(2000).describe("Ms to wait after reload"),
-    strategies: z.array(z.enum(["fetch", "xhr", "dom", "mse"])).optional().describe("Interception strategies to enable"),
+    strategies: z.array(z.enum(["fetch", "xhr", "dom", "mse"])).optional().describe("Interception strategies to enable (default: all)"),
     urlPattern: z.string().optional().describe("Only capture resources matching this URL pattern"),
     preset: z.enum(["twitter", "default"]).optional().describe("Use a preset configuration"),
   },
@@ -478,17 +485,24 @@ mcpServer.tool(
 
 mcpServer.tool(
   "get-tab-media-resources",
-  "Retrieve media resources captured by the installed interceptor. You can filter the results.",
+  `Retrieve media resource URLs captured by a previously installed interceptor.
+
+PREREQUISITE: install-media-interceptor must be called first on this tab.
+
+Options:
+- flush: Clear captured list after retrieval (for polling)
+- filter.types: Only return specific media types (video, audio, stream, image)
+- filter.urlPattern: Only return URLs containing this substring`,
   {
     tabId: z.number().describe("Tab ID to get resources from"),
+    flush: z.boolean().optional().default(false).describe("Clear captured list after retrieval"),
     filter: z.object({
       types: z.array(z.enum(["video", "audio", "image", "stream"])).optional(),
       urlPattern: z.string().optional(),
-      shouldClear: z.boolean().optional().describe("Clear the intercepted list after retrieval (default: false)"),
     }).optional(),
   },
-  async ({ tabId, filter }) => {
-    const result = await browserApi.getTabMediaResources(tabId, filter);
+  async ({ tabId, flush, filter }) => {
+    const result = await browserApi.getTabMediaResources(tabId, flush, filter);
 
     if (!result.resources || result.resources.length === 0) {
       return {
@@ -496,7 +510,7 @@ mcpServer.tool(
       };
     }
 
-    const formatted = result.resources.map((r, i) => {
+    const formatted = result.resources.map((r: any, i: number) => {
       let text = `[${i + 1}] ${r.type.toUpperCase()} (${r.source}): ${r.url}`;
       if (r.mimeType) text += ` [${r.mimeType}]`;
       if (r.metadata?.isBlobUrl) text += ` (Blob URL)`;

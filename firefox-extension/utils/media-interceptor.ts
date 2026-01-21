@@ -42,35 +42,45 @@ function interceptorFunction() {
         url: string,
         mimeType?: string
     ): { type: "video" | "audio" | "stream" | "image" | "unknown"; extension?: string } {
-        // ... (existing determineType logic remains same, omitted for brevity as it's helper)
-        const lowerUrl = url.toLowerCase();
-
-        // Optimization: Early check against pattern before even parsing type?
-        // Actually, user requested "Early check", which we do in addResource.
-        // But doing it here might save regex/string ops. 
-        // Let's rely on addResource for centralized filtering.
-
-        // Check extensions
-        if (lowerUrl.includes(".m3u8") || lowerUrl.includes(".mpd")) {
-            return { type: "stream", extension: lowerUrl.includes(".m3u8") ? "m3u8" : "mpd" };
+        // Extract extension from URL pathname using URL API
+        let ext = '';
+        try {
+            const pathname = new URL(url, 'http://x').pathname;
+            const lastSegment = pathname.split('/').pop() || '';
+            const dotIndex = lastSegment.lastIndexOf('.');
+            if (dotIndex > 0) {
+                ext = lastSegment.substring(dotIndex + 1).toLowerCase();
+            }
+        } catch {
+            // Fallback: simple extraction for malformed URLs
+            const match = url.match(/\.([a-zA-Z0-9]+)(?:\?|#|$)/);
+            if (match) ext = match[1].toLowerCase();
         }
 
-        const videoExts = [".mp4", ".webm", ".ogv", ".mov", ".avi", ".wmv", ".flv", ".mkv"];
-        for (const ext of videoExts) {
-            if (lowerUrl.includes(ext)) return { type: "video", extension: ext.substring(1) };
+        // Check streaming formats
+        if (ext === 'm3u8' || ext === 'mpd') {
+            return { type: "stream", extension: ext };
         }
 
-        const audioExts = [".mp3", ".wav", ".ogg", ".m4a", ".aac", ".flac", ".weba"];
-        for (const ext of audioExts) {
-            if (lowerUrl.includes(ext)) return { type: "audio", extension: ext.substring(1) };
+        // Check video extensions
+        const videoExts = ['mp4', 'webm', 'ogv', 'mov', 'avi', 'wmv', 'flv', 'mkv'];
+        if (videoExts.includes(ext)) {
+            return { type: "video", extension: ext };
         }
 
-        const imageExts = [".jpg", ".jpeg", ".png", ".gif", ".webp", ".svg"];
-        for (const ext of imageExts) {
-            if (lowerUrl.includes(ext)) return { type: "image", extension: ext.substring(1) };
+        // Check audio extensions
+        const audioExts = ['mp3', 'wav', 'ogg', 'm4a', 'aac', 'flac', 'weba'];
+        if (audioExts.includes(ext)) {
+            return { type: "audio", extension: ext };
         }
 
-        // Check MIME type
+        // Check image extensions
+        const imageExts = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg'];
+        if (imageExts.includes(ext)) {
+            return { type: "image", extension: ext };
+        }
+
+        // Check MIME type as fallback
         if (mimeType) {
             if (mimeType.includes("application/vnd.apple.mpegurl") || mimeType.includes("application/dash+xml")) {
                 return { type: "stream" };
@@ -325,7 +335,7 @@ function interceptorFunction() {
         window.dispatchEvent(resultEvent);
 
         // Clear if requested
-        if (options && options.shouldClear) {
+        if (options && options.flush) {
             capturedResources.length = 0;
             // Removed console log to reduce noise, or keep for debug:
             console.log("MCP Media Interceptor: Resources cleared.");
@@ -395,7 +405,7 @@ function interceptorFunction() {
     }
 
     // Define collection function globally so subsequent calls can use it
-    (window as any).__MCP_COLLECT_MEDIA_RESOURCES__ = function (options?: { shouldClear?: boolean }) {
+    (window as any).__MCP_COLLECT_MEDIA_RESOURCES__ = function (options?: { flush?: boolean }) {
         return new Promise((resolve) => {
             // 1. Wait a tiny bit to allow any pending async ops? 
             // Since we control when this is called, we assume the caller has waited appropriately.
@@ -436,7 +446,7 @@ function interceptorFunction() {
     browser.runtime.onMessage.addListener((message, sender, sendResponse) => {
         if (message.type === 'COLLECT_MEDIA_RESOURCES') {
             // Must return a Promise to keep the message channel open for async response
-            return (window as any).__MCP_COLLECT_MEDIA_RESOURCES__({ shouldClear: message.shouldClear }).then((result: any) => {
+            return (window as any).__MCP_COLLECT_MEDIA_RESOURCES__({ flush: message.flush }).then((result: any) => {
                 return result;
             });
         }

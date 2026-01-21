@@ -119,10 +119,10 @@ export interface InstallMediaInterceptorServerMessage extends ServerMessageBase 
 export interface GetInterceptedMediaResourcesServerMessage extends ServerMessageBase {
   cmd: "get-tab-media-resources";
   tabId: number;
+  flush?: boolean;
   filter?: {
     types?: ("video" | "audio" | "image" | "stream")[];
     urlPattern?: string;
-    shouldClear?: boolean;
   };
 }
 

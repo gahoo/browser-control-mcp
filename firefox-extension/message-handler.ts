@@ -100,7 +100,7 @@ export class MessageHandler {
         await this.installMediaInterceptor(req.correlationId, req.tabId, req.options);
         break;
       case "get-tab-media-resources":
-        await this.getTabMediaResources(req.correlationId, req.tabId, req.filter);
+        await this.getTabMediaResources(req.correlationId, req.tabId, req.flush, req.filter);
         break;
       default:
         const _exhaustiveCheck: never = req;
@@ -890,54 +890,34 @@ export class MessageHandler {
   private async getTabMediaResources(
     correlationId: string,
     tabId: number,
+    flush?: boolean,
     filter?: {
       types?: ("video" | "audio" | "image" | "stream")[];
       urlPattern?: string;
-      shouldClear?: boolean;
     }
   ): Promise<void> {
     let results: any;
+
+    // Check if tab exists first
     try {
-      // Attempt to retrieve via message first
-      try {
-        results = await browser.tabs.sendMessage(tabId, {
-          type: 'COLLECT_MEDIA_RESOURCES',
-          shouldClear: filter?.shouldClear
-        });
-      } catch (e) {
-        console.warn("Message retrieval failed, falling back to executeScript", e);
-      }
+      await browser.tabs.get(tabId);
+    } catch (e) {
+      throw new Error("TAB_NOT_FOUND: Invalid tab ID");
+    }
 
-      if (!results) {
-        // Fallback: Lazy Injection via executeScript
-        // Inject stats options first if needed
-        if (filter?.shouldClear) {
-          await browser.tabs.executeScript(tabId, {
-            code: `window.__MCP_COLLECT_OPTIONS__ = { shouldClear: true };`,
-            allFrames: true
-          });
-        }
-
-        const executionResults = await browser.tabs.executeScript(tabId, {
-          file: "dist/media-interceptor.js",
-          allFrames: true
-        });
-        results = executionResults.find(r => r !== null && r !== undefined);
-
-        // Ideally clean up the global options
-        if (filter?.shouldClear) {
-          await browser.tabs.executeScript(tabId, {
-            code: `delete window.__MCP_COLLECT_OPTIONS__;`,
-            allFrames: true
-          }).catch(() => { });
-        }
-      }
-    } catch (error: any) {
-      throw new Error(`Failed to collect media resources: ${error.message}`);
+    try {
+      // Retrieve via message - interceptor must already be installed
+      results = await browser.tabs.sendMessage(tabId, {
+        type: 'COLLECT_MEDIA_RESOURCES',
+        flush: flush
+      });
+    } catch (e: any) {
+      // No fallback - interceptor must be installed first
+      throw new Error("INTERCEPTOR_NOT_INSTALLED: Call install-media-interceptor first");
     }
 
     if (!results) {
-      throw new Error("Media interceptor returned no results");
+      throw new Error("COLLECTION_TIMEOUT: Media interceptor did not respond");
     }
 
     let { resources, interceptorInfo } = results;
