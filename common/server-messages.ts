@@ -104,6 +104,28 @@ export interface ReloadTabServerMessage extends ServerMessageBase {
   bypassCache?: boolean;
 }
 
+export interface InstallMediaInterceptorServerMessage extends ServerMessageBase {
+  cmd: "install-media-interceptor";
+  tabId: number;
+  options?: {
+    autoReload?: boolean;
+    waitAfterReload?: number;
+    strategies?: ("fetch" | "xhr" | "dom" | "mse")[];
+    urlPattern?: string;
+    preset?: "twitter" | "default";
+  };
+}
+
+export interface GetInterceptedMediaResourcesServerMessage extends ServerMessageBase {
+  cmd: "get-tab-media-resources";
+  tabId: number;
+  filter?: {
+    types?: ("video" | "audio" | "image" | "stream")[];
+    urlPattern?: string;
+    shouldClear?: boolean;
+  };
+}
+
 export type ServerMessage =
   | OpenTabServerMessage
   | CloseTabsServerMessage
@@ -120,6 +142,8 @@ export type ServerMessage =
   | ExecuteScriptServerMessage
   | GetTabMarkdownContentServerMessage
   | GetDebugPasswordServerMessage
-  | ReloadTabServerMessage;
+  | ReloadTabServerMessage
+  | InstallMediaInterceptorServerMessage
+  | GetInterceptedMediaResourcesServerMessage;
 
 export type ServerMessageRequest = ServerMessage & { correlationId: string };

@@ -12,6 +12,7 @@ import type {
   ClickResultExtensionMessage,
   ExecuteScriptResultExtensionMessage,
   MarkdownContentExtensionMessage,
+  InterceptedMediaResourcesExtensionMessage,
 } from "@browser-control-mcp/common";
 import { isPortInUse } from "./util";
 import * as crypto from "crypto";
@@ -288,6 +289,43 @@ export class BrowserAPI {
     await this.waitForResponse(correlationId, "tab-reloaded");
   }
 
+  async installMediaInterceptor(
+    tabId: number,
+    options?: {
+      autoReload?: boolean;
+      waitAfterReload?: number;
+      strategies?: ("fetch" | "xhr" | "dom" | "mse")[];
+      urlPattern?: string;
+      preset?: "twitter" | "default";
+    }
+  ): Promise<InterceptedMediaResourcesExtensionMessage> {
+    const correlationId = this.sendMessageToExtension({
+      cmd: "install-media-interceptor",
+      tabId,
+      options,
+    });
+    // Use a longer timeout because this might involve reloading the page
+    const timeout = options?.autoReload ? 30000 : 10000;
+    // We expect the "intercepted-media-resources" message as confirmation (with empty resources list)
+    return await this.waitForResponse(correlationId, "intercepted-media-resources", timeout);
+  }
+
+  async getTabMediaResources(
+    tabId: number,
+    filter?: {
+      types?: ("video" | "audio" | "image" | "stream")[];
+      urlPattern?: string;
+      shouldClear?: boolean;
+    }
+  ): Promise<InterceptedMediaResourcesExtensionMessage> {
+    const correlationId = this.sendMessageToExtension({
+      cmd: "get-tab-media-resources",
+      tabId,
+      filter,
+    });
+    return await this.waitForResponse(correlationId, "intercepted-media-resources");
+  }
+
   private createSignature(payload: string): string {
     if (!this.sharedSecret) {
       throw new Error("Shared secret not initialized");
@@ -337,7 +375,8 @@ export class BrowserAPI {
 
   private async waitForResponse<T extends ExtensionMessage["resource"]>(
     correlationId: string,
-    resource: T
+    resource: T,
+    timeoutMs: number = EXTENSION_RESPONSE_TIMEOUT_MS
   ): Promise<Extract<ExtensionMessage, { resource: T }>> {
     return new Promise<Extract<ExtensionMessage, { resource: T }>>(
       (resolve, reject) => {
@@ -349,7 +388,7 @@ export class BrowserAPI {
         setTimeout(() => {
           this.extensionRequestMap.delete(correlationId);
           reject("Timed out waiting for response");
-        }, EXTENSION_RESPONSE_TIMEOUT_MS);
+        }, timeoutMs);
       }
     );
   }

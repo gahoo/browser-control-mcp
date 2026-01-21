@@ -55,3 +55,7 @@ dist
 web-ext-artifacts/
 
 .DS_Store
+
+# test
+test/*
+test/.gemini/settings.json

@@ -84,6 +84,16 @@ export const AVAILABLE_TOOLS: ToolInfo[] = [
     id: "reload-browser-tab",
     name: "Reload Browser Tab",
     description: "Allows the MCP server to reload/refresh browser tabs"
+  },
+  {
+    id: "install-media-interceptor",
+    name: "Install Media Interceptor",
+    description: "Injects media interception scripts into a page with configurable strategies"
+  },
+  {
+    id: "get-tab-media-resources",
+    name: "Get Intercepted Media Resources",
+    description: "Retrieves captured media resources from an intercepted page"
   }
 ];
 
@@ -105,6 +115,8 @@ export const COMMAND_TO_TOOL_ID: Record<ServerMessageRequest["cmd"], string> = {
   "get-debug-password": "execute-script",
   "get-tab-markdown-content": "get-tab-markdown-content",
   "reload-tab": "reload-browser-tab",
+  "install-media-interceptor": "install-media-interceptor",
+  "get-tab-media-resources": "get-tab-media-resources",
 };
 
 // Storage schema for tool settings

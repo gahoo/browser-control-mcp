@@ -2,6 +2,11 @@ import type { ServerMessageRequest } from "@browser-control-mcp/common";
 import { WebsocketClient } from "./client";
 import { isCommandAllowed, isDomainInDenyList, COMMAND_TO_TOOL_ID, addAuditLogEntry, getDebugPassword, validateAndConsumeDebugPassword } from "./extension-config";
 import { convertToMarkdown } from "./utils/markdown-converter";
+import {
+  TabReloadedExtensionMessage,
+  InterceptedMediaResourcesExtensionMessage,
+} from "../common/extension-messages";
+
 
 export class MessageHandler {
   private client: WebsocketClient;
@@ -90,6 +95,12 @@ export class MessageHandler {
         break;
       case "reload-tab":
         await this.reloadTab(req.correlationId, req.tabId, req.bypassCache);
+        break;
+      case "install-media-interceptor":
+        await this.installMediaInterceptor(req.correlationId, req.tabId, req.options);
+        break;
+      case "get-tab-media-resources":
+        await this.getTabMediaResources(req.correlationId, req.tabId, req.filter);
         break;
       default:
         const _exhaustiveCheck: never = req;
@@ -776,6 +787,183 @@ export class MessageHandler {
       resource: "tab-reloaded",
       correlationId,
       tabId,
+    });
+  }
+
+  private async installMediaInterceptor(
+    correlationId: string,
+    tabId: number,
+    options?: {
+      autoReload?: boolean;
+      waitAfterReload?: number;
+      strategies?: ("fetch" | "xhr" | "dom" | "mse")[];
+      urlPattern?: string;
+      preset?: "twitter" | "default";
+    }
+  ): Promise<void> {
+    const tab = await browser.tabs.get(tabId);
+    if (tab.url && (await isDomainInDenyList(tab.url))) {
+      throw new Error(`Domain in tab URL is in the deny list`);
+    }
+
+    await this.checkForUrlPermission(tab.url);
+
+    // Prepare config object
+    const config = {
+      strategies: options?.strategies,
+      urlPattern: options?.urlPattern
+    };
+    const configScriptInfo = {
+      code: `window.__MCP_MEDIA_INTERCEPTOR_CONFIG__ = ${JSON.stringify(config)};`
+    };
+
+    let registeredScript: any = null;
+
+    if (options?.autoReload) {
+      // Early Injection via contentScripts.register
+      try {
+        if (tab.url) {
+          const matchTarget = tab.url.split('#')[0];
+          registeredScript = await (browser as any).contentScripts.register({
+            matches: [matchTarget],
+            js: [
+              configScriptInfo, // Inject config first
+              { file: "dist/media-interceptor.js" }
+            ],
+            runAt: "document_start",
+            allFrames: true
+          });
+          console.log("Registered content script for early injection at:", matchTarget);
+        }
+      } catch (e) {
+        console.warn("Failed to register content script, falling back", e);
+      }
+
+      await browser.tabs.reload(tabId, { bypassCache: true });
+
+      // Wait for reload logic
+      const MAX_LOAD_WAIT = 15000;
+      const startTime = Date.now();
+      while (Date.now() - startTime < MAX_LOAD_WAIT) {
+        try {
+          const t = await browser.tabs.get(tabId);
+          if (t.status === 'complete') break;
+        } catch (e) { }
+        await new Promise(r => setTimeout(r, 500));
+      }
+
+      const waitTime = options?.waitAfterReload || 2000;
+      await new Promise(resolve => setTimeout(resolve, waitTime));
+
+      if (registeredScript) {
+        try { await registeredScript.unregister(); } catch (e) { }
+      }
+    } else {
+      // Lazy Injection via executeScript
+      // 1. Inject Config
+      await browser.tabs.executeScript(tabId, {
+        code: configScriptInfo.code,
+        matchAboutBlank: true,
+        allFrames: true
+      });
+      // 2. Inject Interceptor
+      await browser.tabs.executeScript(tabId, {
+        file: "dist/media-interceptor.js",
+        allFrames: true
+      });
+    }
+
+    // Return success
+    await this.client.sendResourceToServer({
+      resource: "intercepted-media-resources",
+      correlationId,
+      tabId,
+      resources: [],
+      wasReloaded: !!options?.autoReload,
+      interceptorInfo: {
+        hooksInstalled: true,
+        earlyInjection: !!options?.autoReload
+      }
+    });
+  }
+
+  private async getTabMediaResources(
+    correlationId: string,
+    tabId: number,
+    filter?: {
+      types?: ("video" | "audio" | "image" | "stream")[];
+      urlPattern?: string;
+      shouldClear?: boolean;
+    }
+  ): Promise<void> {
+    let results: any;
+    try {
+      // Attempt to retrieve via message first
+      try {
+        results = await browser.tabs.sendMessage(tabId, {
+          type: 'COLLECT_MEDIA_RESOURCES',
+          shouldClear: filter?.shouldClear
+        });
+      } catch (e) {
+        console.warn("Message retrieval failed, falling back to executeScript", e);
+      }
+
+      if (!results) {
+        // Fallback: Lazy Injection via executeScript
+        // Inject stats options first if needed
+        if (filter?.shouldClear) {
+          await browser.tabs.executeScript(tabId, {
+            code: `window.__MCP_COLLECT_OPTIONS__ = { shouldClear: true };`,
+            allFrames: true
+          });
+        }
+
+        const executionResults = await browser.tabs.executeScript(tabId, {
+          file: "dist/media-interceptor.js",
+          allFrames: true
+        });
+        results = executionResults.find(r => r !== null && r !== undefined);
+
+        // Ideally clean up the global options
+        if (filter?.shouldClear) {
+          await browser.tabs.executeScript(tabId, {
+            code: `delete window.__MCP_COLLECT_OPTIONS__;`,
+            allFrames: true
+          }).catch(() => { });
+        }
+      }
+    } catch (error: any) {
+      throw new Error(`Failed to collect media resources: ${error.message}`);
+    }
+
+    if (!results) {
+      throw new Error("Media interceptor returned no results");
+    }
+
+    let { resources, interceptorInfo } = results;
+
+    // Apply Filter
+    if (filter) {
+      if (filter.types && filter.types.length > 0) {
+        resources = resources.filter((r: any) => filter.types!.includes(r.type));
+      }
+      if (filter.urlPattern) {
+        resources = resources.filter((r: any) => r.url.includes(filter.urlPattern!));
+      }
+    }
+
+    await this.client.sendResourceToServer({
+      resource: "intercepted-media-resources",
+      correlationId,
+      tabId,
+      resources: resources || [],
+      wasReloaded: false,
+      interceptorInfo: {
+        hooksInstalled: interceptorInfo?.hooksInstalled || false,
+        cspInfo: interceptorInfo?.cspInfo,
+        logs: interceptorInfo?.logs,
+        earlyInjection: interceptorInfo?.earlyInjection || false
+      }
     });
   }
 }

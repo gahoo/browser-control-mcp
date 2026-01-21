@@ -14,7 +14,8 @@
     "find"
   ],
   "web_accessible_resources": [
-    "dist/extractor.js"
+    "dist/extractor.js",
+    "dist/media-interceptor.js"
   ],
   "background": {
     "scripts": [

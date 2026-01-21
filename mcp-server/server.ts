@@ -446,6 +446,75 @@ mcpServer.tool(
   }
 );
 
+mcpServer.tool(
+  "install-media-interceptor",
+  "Install the media interception script into a browser tab. This prepares the tab for capturing media (video/audio/streams). You can configure strategies and filtering.",
+  {
+    tabId: z.number().describe("Tab ID to install interceptor in"),
+    autoReload: z.boolean().optional().default(false).describe("Reload page to capture early resources (document_start)"),
+    waitAfterReload: z.number().optional().default(2000).describe("Ms to wait after reload"),
+    strategies: z.array(z.enum(["fetch", "xhr", "dom", "mse"])).optional().describe("Interception strategies to enable"),
+    urlPattern: z.string().optional().describe("Only capture resources matching this URL pattern"),
+    preset: z.enum(["twitter", "default"]).optional().describe("Use a preset configuration"),
+  },
+  async ({ tabId, autoReload, waitAfterReload, strategies, urlPattern, preset }) => {
+    await browserApi.installMediaInterceptor(tabId, {
+      autoReload,
+      waitAfterReload,
+      strategies,
+      urlPattern,
+      preset,
+    });
+    return {
+      content: [
+        {
+          type: "text",
+          text: `Media interceptor installed successfully.${autoReload ? " (Page reloaded)" : ""}`,
+        },
+      ],
+    };
+  }
+);
+
+mcpServer.tool(
+  "get-tab-media-resources",
+  "Retrieve media resources captured by the installed interceptor. You can filter the results.",
+  {
+    tabId: z.number().describe("Tab ID to get resources from"),
+    filter: z.object({
+      types: z.array(z.enum(["video", "audio", "image", "stream"])).optional(),
+      urlPattern: z.string().optional(),
+      shouldClear: z.boolean().optional().describe("Clear the intercepted list after retrieval (default: false)"),
+    }).optional(),
+  },
+  async ({ tabId, filter }) => {
+    const result = await browserApi.getTabMediaResources(tabId, filter);
+
+    if (!result.resources || result.resources.length === 0) {
+      return {
+        content: [{ type: "text", text: "No media resources found" }],
+      };
+    }
+
+    const formatted = result.resources.map((r, i) => {
+      let text = `[${i + 1}] ${r.type.toUpperCase()} (${r.source}): ${r.url}`;
+      if (r.mimeType) text += ` [${r.mimeType}]`;
+      if (r.metadata?.isBlobUrl) text += ` (Blob URL)`;
+      return {
+        type: "text" as const,
+        text
+      };
+    });
+
+    return {
+      content: [
+        { type: "text", text: `Found ${result.resources.length} media resources:` },
+        ...formatted
+      ]
+    };
+  }
+);
+
 const browserApi = new BrowserAPI();
 browserApi.init().catch((err) => {
   console.error("Browser API init error", err);

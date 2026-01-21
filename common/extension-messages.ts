@@ -133,6 +133,34 @@ export interface TabReloadedExtensionMessage extends ExtensionMessageBase {
   tabId: number;
 }
 
+export interface MediaResource {
+  url: string;
+  type: "video" | "audio" | "stream" | "image" | "unknown";
+  source: "dom" | "fetch" | "xhr" | "mse" | "element-src";
+  mimeType?: string;
+  extension?: string;
+  metadata?: {
+    elementTag?: string; // video, audio, source
+    elementSelector?: string;
+    requestHeaders?: Record<string, string>;
+    isBlobUrl?: boolean;
+    originalBlobUrl?: string; // If we resolved a blob URL
+  };
+}
+
+export interface InterceptedMediaResourcesExtensionMessage extends ExtensionMessageBase {
+  resource: "intercepted-media-resources";
+  tabId: number;
+  resources: MediaResource[];
+  wasReloaded: boolean;
+  interceptorInfo: {
+    hooksInstalled: boolean;
+    cspInfo?: string;
+    logs?: string[];
+    earlyInjection?: boolean;
+  };
+}
+
 export type ExtensionMessage =
   | TabContentExtensionMessage
   | TabsExtensionMessage
@@ -148,7 +176,9 @@ export type ExtensionMessage =
   | ExecuteScriptResultExtensionMessage
   | MarkdownContentExtensionMessage
   | DebugPasswordExtensionMessage
-  | TabReloadedExtensionMessage;
+  | TabReloadedExtensionMessage
+  | TabReloadedExtensionMessage
+  | InterceptedMediaResourcesExtensionMessage;
 
 export interface ExtensionError {
   correlationId: string;
