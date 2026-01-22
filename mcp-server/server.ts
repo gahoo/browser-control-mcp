@@ -454,6 +454,9 @@ IMPORTANT: Call this BEFORE the page loads media content for best results.
 - strategies: APIs to hook (fetch, xhr, dom, mse). Default: all
 - autoReload: Reload page to capture early requests. Only useful for fetch/xhr/mse, not needed for dom-only
 - urlPattern: Filter by URL substring during capture
+- preset: Site-specific optimizations:
+  - "twitter": For x.com/twitter.com - extracts highest quality MP4 video URLs from Twitter API responses
+  - "default": Generic media interception (no special handling)
 
 After installing, use get-tab-media-resources to retrieve captured URLs.`,
   {
@@ -462,7 +465,7 @@ After installing, use get-tab-media-resources to retrieve captured URLs.`,
     waitAfterReload: z.number().optional().default(2000).describe("Ms to wait after reload"),
     strategies: z.array(z.enum(["fetch", "xhr", "dom", "mse"])).optional().describe("Interception strategies to enable (default: all)"),
     urlPattern: z.string().optional().describe("Only capture resources matching this URL pattern"),
-    preset: z.enum(["twitter", "default"]).optional().describe("Use a preset configuration"),
+    preset: z.enum(["twitter", "default"]).optional().describe("Site-specific preset: 'twitter' for x.com/twitter.com (extracts highest quality MP4s from API), 'default' for generic pages"),
   },
   async ({ tabId, autoReload, waitAfterReload, strategies, urlPattern, preset }) => {
     await browserApi.installMediaInterceptor(tabId, {

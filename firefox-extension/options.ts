@@ -209,9 +209,9 @@ async function saveDomainLists(event: MouseEvent) {
     const denyListText = domainDenyListTextarea.value.trim();
     const denyList = denyListText
       ? denyListText
-          .split("\n")
-          .map((domain) => domain.trim())
-          .filter(Boolean)
+        .split("\n")
+        .map((domain) => domain.trim())
+        .filter(Boolean)
       : [];
 
     // Save to storage
@@ -267,9 +267,9 @@ async function savePorts(event: MouseEvent) {
     const portsText = portsInput.value.trim();
     const portStrings = portsText
       ? portsText
-          .split(",")
-          .map((port) => port.trim())
-          .filter(Boolean)
+        .split(",")
+        .map((port) => port.trim())
+        .filter(Boolean)
       : [];
 
     // Validate and convert to numbers
@@ -309,10 +309,10 @@ async function savePorts(event: MouseEvent) {
 async function loadAuditLog() {
   try {
     const auditLog = await getAuditLog();
-    
+
     // Clear existing content
     auditLogContainer.innerHTML = "";
-    
+
     if (auditLog.length === 0) {
       // Show empty state
       const emptyDiv = document.createElement("div");
@@ -321,66 +321,72 @@ async function loadAuditLog() {
       auditLogContainer.appendChild(emptyDiv);
       return;
     }
-    
+
     // Create table
     const table = document.createElement("table");
     table.className = "audit-log-table";
-    
+
     // Create header
     const thead = document.createElement("thead");
     const headerRow = document.createElement("tr");
-    
+
     const headers = ["Tool", "Timestamp", "Domain"];
     headers.forEach(headerText => {
       const th = document.createElement("th");
       th.textContent = headerText;
       headerRow.appendChild(th);
     });
-    
+
     thead.appendChild(headerRow);
     table.appendChild(thead);
-    
+
     // Create body
     const tbody = document.createElement("tbody");
-    
+
     auditLog.forEach(entry => {
       const row = document.createElement("tr");
-      
+
       // Tool name
       const toolCell = document.createElement("td");
       toolCell.textContent = getToolNameById(entry.toolId);
       row.appendChild(toolCell);
-      
+
       // Timestamp
       const timestampCell = document.createElement("td");
       timestampCell.className = "audit-log-timestamp";
       const date = new Date(entry.timestamp);
       timestampCell.textContent = date.toLocaleString();
       row.appendChild(timestampCell);
-      
+
       // URL Domain
       const urlCell = document.createElement("td");
       urlCell.className = "audit-log-url";
       if (entry.url) {
         // Show only the domain part of the URL
         try {
-          const urlObj = new URL(entry.url);
+          // Handle URLs that may not have a protocol
+          let urlToParse = entry.url;
+          if (!urlToParse.includes('://')) {
+            urlToParse = 'https://' + urlToParse;
+          }
+          const urlObj = new URL(urlToParse);
           urlCell.textContent = urlObj.hostname;
         } catch (e) {
           console.error("Invalid URL in audit log entry:", e);
-          urlCell.textContent = "Invalid URL";
+          // Show the raw URL value if parsing fails
+          urlCell.textContent = entry.url;
         }
       } else {
         urlCell.textContent = "-";
       }
       row.appendChild(urlCell);
-      
+
       tbody.appendChild(row);
     });
-    
+
     table.appendChild(tbody);
     auditLogContainer.appendChild(table);
-    
+
   } catch (error) {
     console.error("Error loading audit log:", error);
     auditLogContainer.innerHTML = '<div class="audit-log-empty">Error loading audit log. Please check console for details.</div>';
@@ -397,10 +403,10 @@ async function handleClearAuditLog(event: MouseEvent) {
 
   try {
     await clearAuditLog();
-    
+
     // Reload the audit log display
     await loadAuditLog();
-    
+
     // Show success message
     auditLogStatusElement.textContent = "Audit log cleared successfully!";
     auditLogStatusElement.style.color = "#4caf50";
@@ -454,7 +460,7 @@ function showPermissionRequest(url: string) {
 
   // Set the domain in the modal
   domainElement.textContent = domain;
-  
+
   // Update permission text for URL permission
   permissionText.textContent = "This will allow the extension to interact with pages on this domain as requested by the MCP server.";
 
@@ -511,7 +517,7 @@ function showGlobalPermissionRequest(permissions: string[]) {
 
   // Set the permissions in the modal
   domainElement.textContent = permissions.join(", ");
-  
+
   // Update permission text for global permissions
   permissionText.textContent = "This will allow the extension to use these browser capabilities as requested by the MCP server.";
 

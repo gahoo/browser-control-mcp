@@ -808,10 +808,26 @@ export class MessageHandler {
 
     await this.checkForUrlPermission(tab.url);
 
+    // Apply preset-specific defaults
+    let effectiveOptions = { ...options };
+    if (options?.preset === 'twitter') {
+      // Twitter preset optimizations:
+      // - autoReload: true - Required to capture TweetDetail API on initial page load
+      // - strategies: ['xhr', 'dom'] - xhr for video API parsing, dom for images
+      // - urlPattern: 'TweetDetail' - Only intercept Twitter video API calls
+      effectiveOptions = {
+        ...effectiveOptions,
+        autoReload: options.autoReload ?? true,
+        strategies: options.strategies ?? ['xhr', 'dom'],
+        urlPattern: options.urlPattern ?? 'TweetDetail'
+      };
+    }
+
     // Prepare config object
     const config = {
-      strategies: options?.strategies,
-      urlPattern: options?.urlPattern
+      strategies: effectiveOptions?.strategies,
+      urlPattern: effectiveOptions?.urlPattern,
+      preset: effectiveOptions?.preset
     };
     const configScriptInfo = {
       code: `window.__MCP_MEDIA_INTERCEPTOR_CONFIG__ = ${JSON.stringify(config)};`
@@ -819,7 +835,7 @@ export class MessageHandler {
 
     let registeredScript: any = null;
 
-    if (options?.autoReload) {
+    if (effectiveOptions?.autoReload) {
       // Early Injection via contentScripts.register
       try {
         if (tab.url) {
@@ -852,7 +868,7 @@ export class MessageHandler {
         await new Promise(r => setTimeout(r, 500));
       }
 
-      const waitTime = options?.waitAfterReload || 2000;
+      const waitTime = effectiveOptions?.waitAfterReload || 2000;
       await new Promise(resolve => setTimeout(resolve, waitTime));
 
       if (registeredScript) {
@@ -879,10 +895,10 @@ export class MessageHandler {
       correlationId,
       tabId,
       resources: [],
-      wasReloaded: !!options?.autoReload,
+      wasReloaded: !!effectiveOptions?.autoReload,
       interceptorInfo: {
         hooksInstalled: true,
-        earlyInjection: !!options?.autoReload
+        earlyInjection: !!effectiveOptions?.autoReload
       }
     });
   }

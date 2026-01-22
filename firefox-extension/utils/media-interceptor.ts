@@ -13,6 +13,8 @@ interface MediaResource {
         requestHeaders?: Record<string, string>;
         isBlobUrl?: boolean;
         originalBlobUrl?: string; // If we resolved a blob URL
+        bitrate?: number; // For Twitter videos
+        twitterApi?: boolean; // Indicates video extracted from Twitter API
     };
 }
 
@@ -25,11 +27,89 @@ function interceptorFunction() {
     const config = (window as any).__MCP_MEDIA_INTERCEPTOR_CONFIG__ || {};
     const strategies = config.strategies || ["fetch", "xhr", "dom", "mse"];
     const urlPattern = config.urlPattern || "";
+    const preset = config.preset || "default";
+
+    // ==================== Twitter Preset Functions ====================
+    // Select highest bitrate video variant
+    function getVariantURLByBitrate(variants: any[], type: 'max' | 'min' = 'max') {
+        return variants.reduce((target: any, variant: any) => {
+            if (variant.content_type === 'video/mp4' && variant.bitrate && (!target ||
+                (type === 'max' && variant.bitrate > target.bitrate) ||
+                (type === 'min' && variant.bitrate < target.bitrate))) {
+                return variant;
+            }
+            return target;
+        }, null);
+    }
+
+    // Extract video variants from Tweet object
+    function extractVariantsFromTweet(tweet: any) {
+        const variants: any[] = [];
+        if (tweet?.__typename === 'Tweet' && tweet.legacy?.extended_entities?.media) {
+            tweet.legacy.extended_entities.media.forEach((media: any) => {
+                if (media.video_info?.variants) {
+                    const best = getVariantURLByBitrate(media.video_info.variants);
+                    if (best) variants.push(best);
+                }
+            });
+        }
+        // Also check for TweetWithVisibilityResults wrapper
+        if (tweet?.__typename === 'TweetWithVisibilityResults' && tweet.tweet) {
+            variants.push(...extractVariantsFromTweet(tweet.tweet));
+        }
+        return variants;
+    }
+
+    // Extract variants from timeline entry
+    function extractVariantsFromEntry(entry: any) {
+        const variants: any[] = [];
+        try {
+            if (entry.content?.entryType === 'TimelineTimelineItem') {
+                if (entry.content.itemContent?.itemType === 'TimelineTweet') {
+                    variants.push(...extractVariantsFromTweet(entry.content.itemContent.tweet_results?.result));
+                }
+            } else if (entry.content?.entryType === 'TimelineTimelineModule') {
+                entry.content.items?.forEach((item: any) => {
+                    if (item.item?.itemContent?.itemType === 'TimelineTweet') {
+                        variants.push(...extractVariantsFromTweet(item.item.itemContent.tweet_results?.result));
+                    }
+                });
+            }
+        } catch (e) { /* ignore parsing errors */ }
+        return variants;
+    }
+
+    // Extract all video variants from Twitter API response
+    function extractTwitterVideos(json: any) {
+        const variants: any[] = [];
+        try {
+            // Handle TweetDetail API response
+            const instructions = json.data?.threaded_conversation_with_injections_v2?.instructions;
+            instructions?.forEach((instruction: any) => {
+                if (instruction.type === 'TimelineAddEntries') {
+                    instruction.entries?.forEach((entry: any) => {
+                        variants.push(...extractVariantsFromEntry(entry));
+                    });
+                }
+            });
+            // Handle UserTweets and other timeline APIs
+            const timelineInstructions = json.data?.user?.result?.timeline_v2?.timeline?.instructions;
+            timelineInstructions?.forEach((instruction: any) => {
+                if (instruction.type === 'TimelineAddEntries') {
+                    instruction.entries?.forEach((entry: any) => {
+                        variants.push(...extractVariantsFromEntry(entry));
+                    });
+                }
+            });
+        } catch (e) { /* ignore parsing errors */ }
+        return variants;
+    }
 
     // Helper to add resource safely
     function addResource(res: MediaResource) {
         // Filter by URL pattern if specified
-        if (urlPattern && !res.url.includes(urlPattern)) return;
+        // Skip this filter for Twitter API parsed resources (urlPattern filters the API request, not the extracted video URLs)
+        if (urlPattern && !res.metadata?.twitterApi && !res.url.includes(urlPattern)) return;
 
         // Avoid duplicates based on URL
         if (capturedResources.some((r) => r.url === res.url)) return;
@@ -183,6 +263,33 @@ function interceptorFunction() {
 
             xhr.addEventListener("load", function () {
                 const contentType = xhr.getResponseHeader("content-type");
+
+                // Twitter preset: parse TweetDetail API responses for video URLs
+                if (preset === 'twitter' && url && typeof url === 'string' && url.includes('TweetDetail')) {
+                    try {
+                        const json = JSON.parse(xhr.responseText);
+                        const videos = extractTwitterVideos(json);
+                        videos.forEach((video: any) => {
+                            if (video && video.url) {
+                                addResource({
+                                    url: video.url,
+                                    type: 'video',
+                                    source: 'xhr',
+                                    mimeType: video.content_type || 'video/mp4',
+                                    extension: 'mp4',
+                                    metadata: {
+                                        bitrate: video.bitrate,
+                                        twitterApi: true
+                                    }
+                                });
+                            }
+                        });
+                    } catch (e) {
+                        console.log('[MCP Media Interceptor] Failed to parse Twitter API response:', e);
+                    }
+                }
+
+                // Default media detection based on MIME type
                 if (url && typeof url === 'string' && contentType) {
                     const typeCheckFromMime = determineType(url, contentType);
                     if (typeCheckFromMime.type !== "unknown" && typeCheckFromMime.type !== "image") {
@@ -359,8 +466,14 @@ function interceptorFunction() {
     (window as any).__MCP_MEDIA_INTERCEPTOR_INSTALLED__ = true;
 
     function inject() {
+        // Read config from content script context (set by message-handler via executeScript)
+        const contentScriptConfig = (window as any).__MCP_MEDIA_INTERCEPTOR_CONFIG__ || {};
+
+        // Serialize config to inject into page context BEFORE the interceptor runs
+        const configCode = `window.__MCP_MEDIA_INTERCEPTOR_CONFIG__ = ${JSON.stringify(contentScriptConfig)};`;
+
         // Serialize the interceptor function 
-        const hookCode = `(${interceptorFunction.toString()})();`;
+        const hookCode = configCode + `(${interceptorFunction.toString()})();`;
 
         const script = document.createElement('script');
 
