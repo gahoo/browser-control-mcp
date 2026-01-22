@@ -15,10 +15,12 @@ import type {
   InterceptedMediaResourcesExtensionMessage,
 } from "@browser-control-mcp/common";
 import { isPortInUse } from "./util";
+import { logger } from "./logger";
 import * as crypto from "crypto";
 
 const WS_DEFAULT_PORT = 8089;
-const EXTENSION_RESPONSE_TIMEOUT_MS = 1000;
+const EXTENSION_RESPONSE_TIMEOUT_MS = 5000;
+const HEARTBEAT_INTERVAL_MS = 30000;
 
 interface ExtensionRequestResolver<T extends ExtensionMessage["resource"]> {
   resource: T;
@@ -30,6 +32,9 @@ export class BrowserAPI {
   private ws: WebSocket | null = null;
   private wsServer: WebSocket.Server | null = null;
   private sharedSecret: string | null = null;
+  private heartbeatInterval: NodeJS.Timeout | null = null;
+  private connectionStartTime: number = 0;
+  private isAlive: boolean = false;
 
   // Map to persist the request to the extension. It maps the request correlationId
   // to a resolver, fulfulling a promise created when sending a message to the extension.
@@ -61,33 +66,101 @@ export class BrowserAPI {
       port,
     });
 
-    console.error(`Starting WebSocket server on ${host}:${port}`);
+    const logConfig = logger.getConfig();
+    logger.info("WebSocket server starting", { host, port, logLevel: logConfig.level, logFile: logConfig.logFile });
+
     this.wsServer.on("connection", async (connection) => {
       this.ws = connection;
+      this.connectionStartTime = Date.now();
+      this.isAlive = true;
 
-      console.error("WebSocket connection established on port", port);
+      logger.info("WebSocket connection established", { port });
+
+      // Setup pong listener for heartbeat
+      this.ws.on("pong", () => {
+        this.isAlive = true;
+        logger.debug("Received pong from extension");
+      });
+
+      // Start heartbeat interval
+      this.startHeartbeat();
 
       this.ws.on("message", (message) => {
-        const decoded = JSON.parse(message.toString());
-        if (isErrorMessage(decoded)) {
-          this.handleExtensionError(decoded);
-          return;
+        const messageStr = message.toString();
+        logger.debug("Received message from extension", { size: messageStr.length });
+
+        try {
+          const decoded = JSON.parse(messageStr);
+          if (isErrorMessage(decoded)) {
+            logger.warn("Received error from extension", { correlationId: decoded.correlationId, error: decoded.errorMessage });
+            this.handleExtensionError(decoded);
+            return;
+          }
+          const signature = this.createSignature(JSON.stringify(decoded.payload));
+          if (signature !== decoded.signature) {
+            logger.error("Invalid message signature - rejecting message");
+            return;
+          }
+          logger.debug("Processing extension message", { resource: decoded.payload?.resource, correlationId: decoded.payload?.correlationId });
+          this.handleDecodedExtensionMessage(decoded.payload);
+        } catch (err) {
+          logger.error("Failed to parse message from extension", { error: String(err) });
         }
-        const signature = this.createSignature(JSON.stringify(decoded.payload));
-        if (signature !== decoded.signature) {
-          console.error("Invalid message signature");
-          return;
-        }
-        this.handleDecodedExtensionMessage(decoded.payload);
+      });
+
+      this.ws.on("close", (code, reason) => {
+        const uptime = Date.now() - this.connectionStartTime;
+        logger.warn("WebSocket connection closed", { code, reason: reason.toString(), uptimeMs: uptime });
+        this.stopHeartbeat();
+        this.isAlive = false;
+      });
+
+      this.ws.on("error", (error) => {
+        logger.error("WebSocket connection error", { error: error.message });
       });
     });
+
     this.wsServer.on("error", (error) => {
-      console.error("WebSocket server error:", error);
+      logger.error("WebSocket server error", { error: error.message });
     });
   }
 
   close() {
+    logger.info("Closing BrowserAPI");
+    this.stopHeartbeat();
     this.wsServer?.close();
+    logger.close();
+  }
+
+  private startHeartbeat(): void {
+    this.stopHeartbeat();
+    logger.debug("Starting heartbeat interval", { intervalMs: HEARTBEAT_INTERVAL_MS });
+
+    this.heartbeatInterval = setInterval(() => {
+      if (!this.ws) return;
+
+      if (!this.isAlive) {
+        logger.warn("Extension did not respond to ping - connection may be dead");
+        // Don't terminate - let the browser extension reconnect
+        return;
+      }
+
+      this.isAlive = false;
+      try {
+        this.ws.ping();
+        logger.debug("Sent ping to extension");
+      } catch (err) {
+        logger.error("Failed to send ping", { error: String(err) });
+      }
+    }, HEARTBEAT_INTERVAL_MS);
+  }
+
+  private stopHeartbeat(): void {
+    if (this.heartbeatInterval) {
+      clearInterval(this.heartbeatInterval);
+      this.heartbeatInterval = null;
+      logger.debug("Stopped heartbeat interval");
+    }
   }
 
   getSelectedPort() {
@@ -338,6 +411,7 @@ export class BrowserAPI {
 
   private sendMessageToExtension(message: ServerMessage): string {
     if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
+      logger.error("Cannot send message - WebSocket not connected", { cmd: message.cmd, readyState: this.ws?.readyState });
       throw new Error("WebSocket is not open");
     }
 
@@ -350,6 +424,8 @@ export class BrowserAPI {
       signature: signature,
     };
 
+    logger.debug("Sending message to extension", { cmd: message.cmd, correlationId });
+
     // Send the signed message to the extension
     this.ws.send(JSON.stringify(signedMessage));
 
@@ -358,20 +434,31 @@ export class BrowserAPI {
 
   private handleDecodedExtensionMessage(decoded: ExtensionMessage) {
     const { correlationId } = decoded;
-    const { resolve, resource } = this.extensionRequestMap.get(correlationId)!;
-    if (resource !== decoded.resource) {
-      console.error("Resource mismatch:", resource, decoded.resource);
+    const resolver = this.extensionRequestMap.get(correlationId);
+    if (!resolver) {
+      logger.warn("Received response for unknown correlationId - may have timed out", { correlationId, resource: decoded.resource });
       return;
     }
+    const { resolve, resource } = resolver;
+    if (resource !== decoded.resource) {
+      logger.error("Resource mismatch", { expected: resource, received: decoded.resource, correlationId });
+      return;
+    }
+    logger.debug("Received response from extension", { resource, correlationId });
     this.extensionRequestMap.delete(correlationId);
     resolve(decoded);
   }
 
   private handleExtensionError(decoded: ExtensionError) {
     const { correlationId, errorMessage } = decoded;
-    const { reject } = this.extensionRequestMap.get(correlationId)!;
+    const resolver = this.extensionRequestMap.get(correlationId);
+    if (!resolver) {
+      logger.warn("Received error for unknown correlationId", { correlationId, errorMessage });
+      return;
+    }
+    logger.error("Extension returned error", { correlationId, errorMessage });
     this.extensionRequestMap.delete(correlationId);
-    reject(errorMessage);
+    resolver.reject(errorMessage);
   }
 
   private async waitForResponse<T extends ExtensionMessage["resource"]>(
@@ -387,8 +474,11 @@ export class BrowserAPI {
           reject,
         });
         setTimeout(() => {
-          this.extensionRequestMap.delete(correlationId);
-          reject("Timed out waiting for response");
+          if (this.extensionRequestMap.has(correlationId)) {
+            logger.warn("Request timed out", { correlationId, resource, timeoutMs });
+            this.extensionRequestMap.delete(correlationId);
+            reject("Timed out waiting for response");
+          }
         }, timeoutMs);
       }
     );

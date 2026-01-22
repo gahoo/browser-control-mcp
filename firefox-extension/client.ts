@@ -6,6 +6,7 @@ import type {
 import { getMessageSignature } from "./auth";
 
 const RECONNECT_INTERVAL = 2000; // 2 seconds
+const MAX_RECONNECT_ATTEMPTS = 5; // Before logging a warning
 
 export class WebsocketClient {
   private socket: WebSocket | null = null;
@@ -14,6 +15,9 @@ export class WebsocketClient {
   private reconnectTimer: number | null = null;
   private connectionAttempts: number = 0;
   private messageCallback: ((data: ServerMessageRequest) => void) | null = null;
+  private isConnected: boolean = false;
+  private lastConnectedTime: number = 0;
+  private totalReconnects: number = 0;
 
   constructor(port: number, secret: string) {
     this.port = port;
@@ -21,22 +25,37 @@ export class WebsocketClient {
   }
 
   public connect(): void {
-    console.log("Connecting to WebSocket server at port", this.port);
+    this.connectionAttempts++;
+    console.log(`[WebSocket] Connecting to ws://localhost:${this.port} (attempt ${this.connectionAttempts})`);
 
     this.socket = new WebSocket(`ws://localhost:${this.port}`);
 
     this.socket.addEventListener("open", () => {
-      console.log("Connected to WebSocket server at port", this.port);
+      console.log(`[WebSocket] Connected to server at port ${this.port}`);
+      this.isConnected = true;
+      this.lastConnectedTime = Date.now();
       this.connectionAttempts = 0;
+
+      if (this.totalReconnects > 0) {
+        console.log(`[WebSocket] Reconnected successfully (total reconnects: ${this.totalReconnects})`);
+      }
     });
 
-    this.socket.addEventListener("close", () => {
-      console.log("WebSocket connection closed event at port", this.port);
-      this.connectionAttempts = 0;
+    this.socket.addEventListener("close", (event) => {
+      const wasConnected = this.isConnected;
+      this.isConnected = false;
+
+      if (wasConnected) {
+        const uptime = Date.now() - this.lastConnectedTime;
+        console.log(`[WebSocket] Connection closed (code: ${event.code}, reason: "${event.reason}", uptime: ${uptime}ms)`);
+        this.totalReconnects++;
+      } else {
+        console.log(`[WebSocket] Connection failed (code: ${event.code})`);
+      }
     });
 
     this.socket.addEventListener("error", (event) => {
-      console.error("WebSocket error:", event);
+      console.error("[WebSocket] Connection error:", event);
     });
 
     this.socket.addEventListener("message", async (event) => {
@@ -50,7 +69,7 @@ export class WebsocketClient {
           this.secret
         );
         if (messageSig.length === 0 || messageSig !== signedMessage.signature) {
-          console.error("Invalid message signature");
+          console.error("[WebSocket] Invalid message signature");
           await this.sendErrorToServer(
             signedMessage.payload.correlationId,
             "Invalid message signature - extension and server not in sync"
@@ -59,7 +78,7 @@ export class WebsocketClient {
         }
         this.messageCallback(signedMessage.payload);
       } catch (error) {
-        console.error("Failed to parse message:", error);
+        console.error("[WebSocket] Failed to parse message:", error);
       }
     });
 
@@ -78,10 +97,9 @@ export class WebsocketClient {
   private startReconnectTimer(): void {
     this.reconnectTimer = window.setInterval(() => {
       if (this.socket && this.socket.readyState === WebSocket.CONNECTING) {
-        this.connectionAttempts++;
-
-        if (this.connectionAttempts > 2) {
-          // Avoid long retry backoff periods by resetting the connection
+        // Socket is still trying to connect
+        if (this.connectionAttempts > MAX_RECONNECT_ATTEMPTS) {
+          console.warn(`[WebSocket] Still connecting after ${this.connectionAttempts} attempts - resetting connection`);
           this.socket.close();
         }
       }
@@ -94,7 +112,7 @@ export class WebsocketClient {
 
   public async sendResourceToServer(resource: ExtensionMessage): Promise<void> {
     if (!this.socket || this.socket.readyState !== WebSocket.OPEN) {
-      console.error("Socket is not open");
+      console.error(`[WebSocket] Cannot send - socket not open (state: ${this.socket?.readyState})`);
       return;
     }
     const signedMessage = {
@@ -112,7 +130,7 @@ export class WebsocketClient {
     errorMessage: string
   ): Promise<void> {
     if (!this.socket || this.socket.readyState !== WebSocket.OPEN) {
-      console.error("Socket is not open", this.socket);
+      console.error(`[WebSocket] Cannot send error - socket not open (state: ${this.socket?.readyState})`);
       return;
     }
     const extensionError: ExtensionError = {
@@ -123,6 +141,7 @@ export class WebsocketClient {
   }
 
   public disconnect(): void {
+    console.log("[WebSocket] Disconnecting...");
     if (this.reconnectTimer !== null) {
       window.clearInterval(this.reconnectTimer);
       this.reconnectTimer = null;
@@ -132,5 +151,13 @@ export class WebsocketClient {
       this.socket.close();
       this.socket = null;
     }
+    console.log("[WebSocket] Disconnected");
+  }
+
+  public getConnectionStatus(): { isConnected: boolean; totalReconnects: number } {
+    return {
+      isConnected: this.isConnected,
+      totalReconnects: this.totalReconnects,
+    };
   }
 }
