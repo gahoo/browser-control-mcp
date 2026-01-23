@@ -13,6 +13,7 @@ import type {
   ExecuteScriptResultExtensionMessage,
   MarkdownContentExtensionMessage,
   InterceptedMediaResourcesExtensionMessage,
+  BlobDataExtensionMessage,
 } from "@browser-control-mcp/common";
 import { isPortInUse } from "./util";
 import { logger } from "./logger";
@@ -398,6 +399,18 @@ export class BrowserAPI {
       filter,
     });
     return await this.waitForResponse(correlationId, "intercepted-media-resources");
+  }
+
+  async fetchBlobUrl(
+    tabId: number,
+    blobUrl: string
+  ): Promise<BlobDataExtensionMessage> {
+    const correlationId = this.sendMessageToExtension({
+      cmd: "fetch-blob-url",
+      tabId,
+      blobUrl,
+    });
+    return await this.waitForResponse(correlationId, "blob-data");
   }
 
   private createSignature(payload: string): string {

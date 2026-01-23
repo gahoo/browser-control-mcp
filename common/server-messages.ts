@@ -126,6 +126,12 @@ export interface GetInterceptedMediaResourcesServerMessage extends ServerMessage
   };
 }
 
+export interface FetchBlobUrlServerMessage extends ServerMessageBase {
+  cmd: "fetch-blob-url";
+  tabId: number;
+  blobUrl: string;
+}
+
 export type ServerMessage =
   | OpenTabServerMessage
   | CloseTabsServerMessage
@@ -144,6 +150,7 @@ export type ServerMessage =
   | GetDebugPasswordServerMessage
   | ReloadTabServerMessage
   | InstallMediaInterceptorServerMessage
-  | GetInterceptedMediaResourcesServerMessage;
+  | GetInterceptedMediaResourcesServerMessage
+  | FetchBlobUrlServerMessage;
 
 export type ServerMessageRequest = ServerMessage & { correlationId: string };

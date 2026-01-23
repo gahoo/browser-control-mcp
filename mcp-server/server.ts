@@ -2,6 +2,9 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
 import { BrowserAPI } from "./browser-api";
+import { logger } from "./logger";
+import { loadAndRegisterPlugins } from "./plugins";
+import * as path from "path";
 import dayjs from "dayjs";
 import relativeTime from "dayjs/plugin/relativeTime";
 
@@ -533,16 +536,26 @@ Options:
 );
 
 const browserApi = new BrowserAPI();
-browserApi.init().catch((err) => {
-  console.error("Browser API init error", err);
-  process.exit(1);
-});
 
-const transport = new StdioServerTransport();
-mcpServer.connect(transport).catch((err) => {
-  console.error("MCP Server connection error", err);
-  process.exit(1);
-});
+// Initialize browser API and load plugins
+async function initialize() {
+  try {
+    await browserApi.init();
+
+    // Load user plugins
+    const pluginsDir = path.join(__dirname, "plugins", "user");
+    await loadAndRegisterPlugins(mcpServer, pluginsDir, { browserApi, logger });
+
+    // Connect to transport
+    const transport = new StdioServerTransport();
+    await mcpServer.connect(transport);
+  } catch (err) {
+    console.error("Initialization error", err);
+    process.exit(1);
+  }
+}
+
+initialize();
 
 process.stdin.on("close", () => {
   browserApi.close();

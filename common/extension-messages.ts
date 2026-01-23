@@ -161,6 +161,16 @@ export interface InterceptedMediaResourcesExtensionMessage extends ExtensionMess
   };
 }
 
+export interface BlobDataExtensionMessage extends ExtensionMessageBase {
+  resource: "blob-data";
+  tabId: number;
+  blobUrl: string;
+  data?: string;  // Base64 encoded
+  mimeType?: string;
+  size?: number;
+  error?: string;
+}
+
 export type ExtensionMessage =
   | TabContentExtensionMessage
   | TabsExtensionMessage
@@ -178,7 +188,8 @@ export type ExtensionMessage =
   | DebugPasswordExtensionMessage
   | TabReloadedExtensionMessage
   | TabReloadedExtensionMessage
-  | InterceptedMediaResourcesExtensionMessage;
+  | InterceptedMediaResourcesExtensionMessage
+  | BlobDataExtensionMessage;
 
 export interface ExtensionError {
   correlationId: string;

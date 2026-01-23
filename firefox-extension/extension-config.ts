@@ -94,10 +94,14 @@ export const AVAILABLE_TOOLS: ToolInfo[] = [
     id: "get-tab-media-resources",
     name: "Get Intercepted Media Resources",
     description: "Retrieves captured media resources from an intercepted page"
+  },
+  {
+    id: "fetch-blob-url",
+    name: "Fetch Blob URL",
+    description: "Fetches content from a blob URL in a browser tab"
   }
 ];
 
-// Map command names to tool IDs
 export const COMMAND_TO_TOOL_ID: Record<ServerMessageRequest["cmd"], string> = {
   "open-tab": "open-browser-tab",
   "close-tabs": "close-browser-tabs",
@@ -117,6 +121,7 @@ export const COMMAND_TO_TOOL_ID: Record<ServerMessageRequest["cmd"], string> = {
   "reload-tab": "reload-browser-tab",
   "install-media-interceptor": "install-media-interceptor",
   "get-tab-media-resources": "get-tab-media-resources",
+  "fetch-blob-url": "fetch-blob-url",
 };
 
 // Storage schema for tool settings

@@ -5,6 +5,7 @@ import { convertToMarkdown } from "./utils/markdown-converter";
 import {
   TabReloadedExtensionMessage,
   InterceptedMediaResourcesExtensionMessage,
+  BlobDataExtensionMessage,
 } from "../common/extension-messages";
 
 
@@ -105,6 +106,9 @@ export class MessageHandler {
         break;
       case "get-tab-media-resources":
         await this.getTabMediaResources(req.correlationId, req.tabId, req.flush, req.filter);
+        break;
+      case "fetch-blob-url":
+        await this.fetchBlobUrl(req.correlationId, req.tabId, req.blobUrl);
         break;
       default:
         const _exhaustiveCheck: never = req;
@@ -990,5 +994,104 @@ export class MessageHandler {
         earlyInjection: interceptorInfo?.earlyInjection || false
       }
     });
+  }
+
+  private async fetchBlobUrl(
+    correlationId: string,
+    tabId: number,
+    blobUrl: string
+  ): Promise<void> {
+    const tab = await browser.tabs.get(tabId);
+    if (tab.url && (await isDomainInDenyList(tab.url))) {
+      throw new Error(`Domain in tab URL is in the deny list`);
+    }
+
+    await this.checkForUrlPermission(tab.url);
+
+    console.log("[MessageHandler] Fetching blob URL:", { tabId, blobUrl });
+
+    try {
+      // Try to fetch from all frames since blob URLs are origin-bound
+      // and may have been created in an iframe
+      const results = await browser.tabs.executeScript(tabId, {
+        code: `
+        (async function() {
+          const blobUrl = ${JSON.stringify(blobUrl)};
+          try {
+            // First check if URL looks valid
+            if (!blobUrl.startsWith('blob:')) {
+              return { error: 'Invalid blob URL format' };
+            }
+            
+            const response = await fetch(blobUrl);
+            if (!response.ok) {
+              return { error: 'Fetch failed: ' + response.status + ' ' + response.statusText };
+            }
+            const blob = await response.blob();
+            const reader = new FileReader();
+            return await new Promise((resolve, reject) => {
+              reader.onloadend = () => {
+                const base64 = reader.result.split(',')[1]; // Remove data:...;base64, prefix
+                resolve({
+                  data: base64,
+                  mimeType: blob.type,
+                  size: blob.size
+                });
+              };
+              reader.onerror = () => resolve({ error: 'FileReader error' });
+              reader.readAsDataURL(blob);
+            });
+          } catch (e) {
+            // Return error info for this frame
+            return { error: e.message || 'Unknown error', frameError: true };
+          }
+        })();
+        `,
+        allFrames: true, // Try in all frames
+      });
+
+      // Find a successful result from any frame
+      let successResult = null;
+      let lastError = 'No frames returned results';
+
+      for (const result of results || []) {
+        if (result && !result.error) {
+          successResult = result;
+          break;
+        } else if (result?.error) {
+          lastError = result.error;
+        }
+      }
+
+      const finalResult = successResult || { error: lastError };
+
+      console.log("[MessageHandler] Blob URL fetch result:", {
+        tabId,
+        success: !finalResult?.error,
+        size: finalResult?.size,
+        mimeType: finalResult?.mimeType,
+        framesChecked: results?.length || 0
+      });
+
+      await this.client.sendResourceToServer({
+        resource: "blob-data",
+        correlationId,
+        tabId,
+        blobUrl,
+        data: finalResult?.data,
+        mimeType: finalResult?.mimeType,
+        size: finalResult?.size,
+        error: finalResult?.error,
+      });
+    } catch (error: any) {
+      console.error("[MessageHandler] Failed to fetch blob URL:", { tabId, blobUrl, error: error.message });
+      await this.client.sendResourceToServer({
+        resource: "blob-data",
+        correlationId,
+        tabId,
+        blobUrl,
+        error: error.message,
+      });
+    }
   }
 }
