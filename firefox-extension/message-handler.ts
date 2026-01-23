@@ -16,13 +16,17 @@ export class MessageHandler {
   }
 
   public async handleDecodedMessage(req: ServerMessageRequest): Promise<void> {
+    const startTime = Date.now();
+    console.log(`[MessageHandler] Received command: ${req.cmd}`, { correlationId: req.correlationId });
+
     const isAllowed = await isCommandAllowed(req.cmd);
     if (!isAllowed) {
+      console.warn(`[MessageHandler] Command '${req.cmd}' is disabled`, { correlationId: req.correlationId });
       throw new Error(`Command '${req.cmd}' is disabled in extension settings`);
     }
 
     this.addAuditLogForReq(req).catch((error) => {
-      console.error("Failed to add audit log entry:", error);
+      console.error("[MessageHandler] Failed to add audit log entry:", error);
     });
 
     switch (req.cmd) {
@@ -104,8 +108,11 @@ export class MessageHandler {
         break;
       default:
         const _exhaustiveCheck: never = req;
-        console.error("Invalid message received:", req);
+        console.error("[MessageHandler] Invalid message received:", req);
     }
+
+    const duration = Date.now() - startTime;
+    console.log(`[MessageHandler] Command completed: ${req.cmd}`, { correlationId: req.correlationId, durationMs: duration });
   }
 
   private async addAuditLogForReq(req: ServerMessageRequest) {
@@ -119,7 +126,7 @@ export class MessageHandler {
         const tab = await browser.tabs.get(req.tabId);
         contextUrl = tab.url;
       } catch (error) {
-        console.error("Failed to get tab URL for audit log:", error);
+        console.warn("[MessageHandler] Failed to get tab for audit log:", { tabId: req.tabId, error });
       }
     }
 
@@ -136,17 +143,20 @@ export class MessageHandler {
 
   private async openUrl(correlationId: string, url: string): Promise<void> {
     if (!url.startsWith("https://")) {
-      console.error("Invalid URL:", url);
+      console.error("[MessageHandler] Invalid URL - must start with https://:", url);
       throw new Error("Invalid URL");
     }
 
     if (await isDomainInDenyList(url)) {
+      console.warn("[MessageHandler] URL domain in deny list:", url);
       throw new Error("Domain in user defined deny list");
     }
 
+    console.log("[MessageHandler] Creating new tab:", { url });
     const tab = await browser.tabs.create({
       url,
     });
+    console.log("[MessageHandler] Tab created:", { tabId: tab.id, url });
 
     await this.client.sendResourceToServer({
       resource: "opened-tab-id",
@@ -159,6 +169,7 @@ export class MessageHandler {
     correlationId: string,
     tabIds: number[]
   ): Promise<void> {
+    console.log("[MessageHandler] Closing tabs:", { tabIds });
     await browser.tabs.remove(tabIds);
     await this.client.sendResourceToServer({
       resource: "tabs-closed",
@@ -205,6 +216,7 @@ export class MessageHandler {
       });
 
       if (!granted) {
+        console.warn("[MessageHandler] Permission not granted for origin:", { origin, url });
         // Open the options page with a URL parameter to request permission:
         const optionsUrl = browser.runtime.getURL("options.html");
         const urlWithParams = `${optionsUrl}?requestUrl=${encodeURIComponent(
@@ -225,6 +237,7 @@ export class MessageHandler {
     });
 
     if (!granted) {
+      console.warn("[MessageHandler] Global permission not granted:", { permissions });
       // Open the options page with a URL parameter to request permission:
       const optionsUrl = browser.runtime.getURL("options.html");
       const urlWithParams = `${optionsUrl}?requestPermissions=${encodeURIComponent(
@@ -840,6 +853,7 @@ export class MessageHandler {
       try {
         if (tab.url) {
           const matchTarget = tab.url.split('#')[0];
+          console.log("[MessageHandler] Registering content script for early injection:", { matchTarget, tabId });
           registeredScript = await (browser as any).contentScripts.register({
             matches: [matchTarget],
             js: [
@@ -849,10 +863,10 @@ export class MessageHandler {
             runAt: "document_start",
             allFrames: true
           });
-          console.log("Registered content script for early injection at:", matchTarget);
+          console.log("[MessageHandler] Content script registered successfully:", { matchTarget });
         }
       } catch (e) {
-        console.warn("Failed to register content script, falling back", e);
+        console.warn("[MessageHandler] Failed to register content script, will use fallback:", { error: e, tabId });
       }
 
       await browser.tabs.reload(tabId, { bypassCache: true });
@@ -872,10 +886,16 @@ export class MessageHandler {
       await new Promise(resolve => setTimeout(resolve, waitTime));
 
       if (registeredScript) {
-        try { await registeredScript.unregister(); } catch (e) { }
+        try {
+          await registeredScript.unregister();
+          console.log("[MessageHandler] Unregistered content script");
+        } catch (e) {
+          console.warn("[MessageHandler] Failed to unregister content script:", e);
+        }
       }
     } else {
       // Lazy Injection via executeScript
+      console.log("[MessageHandler] Installing media interceptor via executeScript:", { tabId, config });
       // 1. Inject Config
       await browser.tabs.executeScript(tabId, {
         code: configScriptInfo.code,
@@ -887,6 +907,7 @@ export class MessageHandler {
         file: "dist/media-interceptor.js",
         allFrames: true
       });
+      console.log("[MessageHandler] Media interceptor installed via executeScript");
     }
 
     // Return success
@@ -913,39 +934,47 @@ export class MessageHandler {
     }
   ): Promise<void> {
     let results: any;
+    console.log("[MessageHandler] Getting media resources:", { tabId, flush, filter });
 
     // Check if tab exists first
     try {
       await browser.tabs.get(tabId);
     } catch (e) {
+      console.error("[MessageHandler] Tab not found:", { tabId });
       throw new Error("TAB_NOT_FOUND: Invalid tab ID");
     }
 
     try {
       // Retrieve via message - interceptor must already be installed
+      console.log("[MessageHandler] Sending COLLECT_MEDIA_RESOURCES message to tab:", { tabId });
       results = await browser.tabs.sendMessage(tabId, {
         type: 'COLLECT_MEDIA_RESOURCES',
         flush: flush
       });
     } catch (e: any) {
       // No fallback - interceptor must be installed first
+      console.error("[MessageHandler] Failed to get media resources - interceptor not installed:", { tabId, error: e.message });
       throw new Error("INTERCEPTOR_NOT_INSTALLED: Call install-media-interceptor first");
     }
 
     if (!results) {
+      console.error("[MessageHandler] Media interceptor did not respond:", { tabId });
       throw new Error("COLLECTION_TIMEOUT: Media interceptor did not respond");
     }
 
     let { resources, interceptorInfo } = results;
+    console.log("[MessageHandler] Received media resources:", { tabId, count: resources?.length || 0, hasInterceptorInfo: !!interceptorInfo });
 
     // Apply Filter
     if (filter) {
+      const originalCount = resources?.length || 0;
       if (filter.types && filter.types.length > 0) {
         resources = resources.filter((r: any) => filter.types!.includes(r.type));
       }
       if (filter.urlPattern) {
         resources = resources.filter((r: any) => r.url.includes(filter.urlPattern!));
       }
+      console.log("[MessageHandler] Applied filter:", { originalCount, filteredCount: resources?.length || 0, filter });
     }
 
     await this.client.sendResourceToServer({
