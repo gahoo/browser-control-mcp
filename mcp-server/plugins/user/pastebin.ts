@@ -11,9 +11,9 @@ import { definePlugin, z } from "../types";
 const PASTEBIN_URL = process.env.PASTEBIN_URL || "https://shz.al/";
 
 // Encryption utilities (matching the reference implementation)
-function concat(buffer1: ArrayBuffer, buffer2: Uint8Array): Uint8Array {
+function concat(buffer1: Uint8Array, buffer2: Uint8Array): Uint8Array {
     const tmp = new Uint8Array(buffer1.byteLength + buffer2.byteLength);
-    tmp.set(new Uint8Array(buffer1), 0);
+    tmp.set(buffer1, 0);
     tmp.set(buffer2, buffer1.byteLength);
     return tmp;
 }
@@ -47,7 +47,8 @@ async function encryptContent(key: CryptoKey, content: string | Buffer): Promise
         key,
         msgBytes
     );
-    return concat(ciphertext, iv);
+    // IV must come FIRST, then ciphertext (matches server-side decryption order)
+    return concat(iv, new Uint8Array(ciphertext));
 }
 
 async function encodeKey(key: CryptoKey): Promise<string> {
