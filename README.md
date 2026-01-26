@@ -90,7 +90,10 @@ After installing the browser extension, add the following configuration to your 
             ],
             "env": {
                 "EXTENSION_SECRET": "<secret_on_firefox_extension_options_page>",
-                "EXTENSION_PORT": "8089" 
+                "EXTENSION_PORT": "8089",
+                "LOG_LEVEL": "info",
+                "LOG_FILE": "/path/to/mcp-server.log",
+                "PASTEBIN_URL": "https://shz.al/"
             }
         }
     }
@@ -98,7 +101,16 @@ After installing the browser extension, add the following configuration to your 
 ```
 Replace `/path/to/repo` with the correct path.
 
-Set the EXTENSION_SECRET to the value shown on the extension's preferences page in Firefox (you can access it at `about:addons`). You can also set the EXTENSION_PORT environment variable to specify the port that the MCP server will use to communicate with the extension (default is 8089).
+**Environment Variables:**
+
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `EXTENSION_SECRET` | Yes | Secret shown on the extension's preferences page in Firefox (`about:addons`) |
+| `EXTENSION_PORT` | No | Port for MCP server ↔ extension communication (default: `8089`) |
+| `LOG_LEVEL` | No | Logging verbosity: `debug`, `info`, `warn`, `error` (default: `info`) |
+| `LOG_FILE` | No | Path to write log file (default: none, logs to stderr only) |
+| `PASTEBIN_URL` | No | Custom Pastebin API URL for `save-to-pastebin` tool (default: `https://shz.al/`) |
+| `CONTAINERIZED` | No | Set to `true` when running in Docker to bind to `0.0.0.0` |
 
 It might take a few seconds for the MCP server to connect to the extension.
 
