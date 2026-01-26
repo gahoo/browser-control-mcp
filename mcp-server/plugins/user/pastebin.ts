@@ -316,8 +316,11 @@ Options:
                     } else if (isRedirect) {
                         // For redirects, use /u/ prefix
                         viewUrl = result.url.replace(PASTEBIN_URL, PASTEBIN_URL + "u/");
-                    } else if (contentFilename) {
-                        // For files, use /a/ prefix for attachment view
+                    } else if (contentFilename && !contentFilename.toLowerCase().endsWith(".md")) {
+                        // For files, append filename to URL for correct name in browser
+                        viewUrl = result.url + "/" + contentFilename;
+                    } else {
+                        // For plain text and .md files, use /a/ prefix for viewer interface
                         viewUrl = result.url.replace(PASTEBIN_URL, PASTEBIN_URL + "a/");
                     }
 
