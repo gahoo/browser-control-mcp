@@ -1105,37 +1105,159 @@ export class MessageHandler {
     options?: {
       referrer?: string;
       headers?: Record<string, string>;
+      fetchMode?: "background" | "tab";
     }
   ): Promise<void> {
     console.log("[MessageHandler] Fetching URL:", { url, tabId, options });
 
-    try {
-      // Build fetch options
-      const fetchOptions: RequestInit = {
-        method: "GET",
-        credentials: "include", // Include cookies for same-origin requests
-      };
+    const fetchMode = options?.fetchMode || "background";
 
-      // Add custom headers if provided
-      if (options?.headers) {
-        fetchOptions.headers = options.headers;
+    try {
+      if (fetchMode === "tab") {
+        // Tab mode: Execute fetch inside the page context to bypass CORS
+        if (!tabId) {
+          await this.client.sendResourceToServer({
+            resource: "fetched-url-data",
+            correlationId,
+            url,
+            error: "Tab mode requires tabId parameter",
+          });
+          return;
+        }
+
+        console.log("[MessageHandler] Using tab-based fetch for URL:", url);
+
+        // Execute fetch inside the tab's page context
+        const results = await browser.tabs.executeScript(tabId, {
+          code: `
+          (async () => {
+            try {
+              const url = ${JSON.stringify(url)};
+              const response = await fetch(url, { credentials: 'include' });
+              if (!response.ok) {
+                return { error: 'Fetch failed: ' + response.status + ' ' + response.statusText };
+              }
+              
+              // Get filename from Content-Disposition or URL
+              let filename;
+              const contentDisposition = response.headers.get('content-disposition');
+              if (contentDisposition) {
+                const match = contentDisposition.match(/filename[*]?=(?:UTF-8'')?["']?([^"';\\n]+)["']?/i);
+                if (match) {
+                  filename = decodeURIComponent(match[1]);
+                }
+              }
+              if (!filename) {
+                try {
+                  const urlPath = new URL(url).pathname;
+                  const pathFilename = urlPath.split('/').pop();
+                  if (pathFilename && pathFilename.includes('.')) {
+                    filename = decodeURIComponent(pathFilename);
+                  }
+                } catch (e) {}
+              }
+              
+              const mimeType = response.headers.get('content-type')?.split(';')[0].trim();
+              const blob = await response.blob();
+              const reader = new FileReader();
+              
+              return await new Promise((resolve, reject) => {
+                reader.onloadend = () => {
+                  const base64 = reader.result.split(',')[1];
+                  resolve({
+                    data: base64,
+                    mimeType: mimeType || blob.type,
+                    size: blob.size,
+                    filename: filename
+                  });
+                };
+                reader.onerror = () => resolve({ error: 'FileReader error' });
+                reader.readAsDataURL(blob);
+              });
+            } catch (e) {
+              return { error: e.message || 'Unknown error' };
+            }
+          })();
+          `,
+        });
+
+        const result = results?.[0];
+
+        if (result?.error) {
+          console.error("[MessageHandler] Tab fetch failed:", result.error);
+          await this.client.sendResourceToServer({
+            resource: "fetched-url-data",
+            correlationId,
+            url,
+            error: result.error,
+          });
+        } else if (result?.data) {
+          console.log("[MessageHandler] Tab fetch successful:", {
+            url,
+            size: result.size,
+            mimeType: result.mimeType,
+            filename: result.filename,
+          });
+          await this.client.sendResourceToServer({
+            resource: "fetched-url-data",
+            correlationId,
+            url,
+            data: result.data,
+            mimeType: result.mimeType,
+            size: result.size,
+            filename: result.filename,
+          });
+        } else {
+          await this.client.sendResourceToServer({
+            resource: "fetched-url-data",
+            correlationId,
+            url,
+            error: "No data returned from tab fetch",
+          });
+        }
+        return;
       }
 
-      // Add referrer if provided or use tab URL
-      if (options?.referrer) {
-        fetchOptions.referrer = options.referrer;
-      } else if (tabId) {
+      // Background mode: Fetch from extension background script
+      // Determine if this is a same-origin request for credentials decision
+      let isSameOrigin = false;
+      let referrerUrl: string | undefined;
+
+      if (tabId) {
         try {
           const tab = await browser.tabs.get(tabId);
           if (tab.url) {
-            fetchOptions.referrer = tab.url;
+            referrerUrl = tab.url;
+            try {
+              const tabOrigin = new URL(tab.url).origin;
+              const urlOrigin = new URL(url).origin;
+              isSameOrigin = tabOrigin === urlOrigin;
+            } catch (e) {
+              // Ignore URL parse errors
+            }
           }
         } catch (e) {
           console.warn("[MessageHandler] Could not get tab for referrer:", e);
         }
       }
 
-      // Perform the fetch (extension context bypasses CORS)
+      // Build fetch options
+      const fetchOptions: RequestInit = {
+        method: "GET",
+        credentials: isSameOrigin ? "include" : "omit",
+        mode: "cors",
+      };
+
+      if (options?.headers) {
+        fetchOptions.headers = options.headers;
+      }
+
+      if (options?.referrer) {
+        fetchOptions.referrer = options.referrer;
+      } else if (referrerUrl) {
+        fetchOptions.referrer = referrerUrl;
+      }
+
       const response = await fetch(url, fetchOptions);
 
       if (!response.ok) {
@@ -1158,7 +1280,6 @@ export class MessageHandler {
         }
       }
       if (!filename) {
-        // Try to extract from URL path
         try {
           const urlPath = new URL(url).pathname;
           const pathFilename = urlPath.split("/").pop();
@@ -1170,17 +1291,13 @@ export class MessageHandler {
         }
       }
 
-      // Get content type
       const mimeType = response.headers.get("content-type")?.split(";")[0].trim();
-
-      // Read response as blob and convert to base64
       const blob = await response.blob();
       const reader = new FileReader();
 
       const base64Data = await new Promise<string>((resolve, reject) => {
         reader.onloadend = () => {
           const result = reader.result as string;
-          // Remove data:...;base64, prefix
           const base64 = result.split(",")[1];
           resolve(base64);
         };

@@ -86,10 +86,12 @@ export default definePlugin({
             name: "save-to-pastebin",
             description: `Upload content to pastebin and return the URL.
 
-Content types:
+Content sources:
 - text: Direct text content. If single-line URL, creates a redirect
-- url: Download from URL and upload. For blob: URLs, requires tabId
-- blob: Direct binary data (from fetch-url tool)
+- url: Download from URL and upload
+  - http:// / https:// : Uses browser context (handles auth, cookies)
+  - blob: : Requires tabId (content script context)
+  - file:// : Read from local filesystem
 
 Options:
 - expiration: Time until paste expires (e.g., "7d", "1h", "30m")
@@ -99,33 +101,28 @@ Options:
                 text: z.string().optional()
                     .describe("Text content. Single-line URL = redirect"),
                 url: z.string().optional()
-                    .describe("URL to download and upload. blob: URLs require tabId"),
+                    .describe("URL to download and upload (http, https, blob, file)"),
                 tabId: z.number().optional()
-                    .describe("Tab ID for blob URL resolution"),
+                    .describe("Tab ID for blob: URLs and browser-based fetch"),
                 expiration: z.string().default("7d")
                     .describe("Expiration time (e.g., '7d', '1h', '30m')"),
                 filename: z.string().optional()
                     .describe("Filename for the upload"),
                 encrypt: z.boolean().default(false)
                     .describe("Enable AES-GCM encryption"),
-                blob: z.object({
-                    data: z.string().describe("Base64 encoded binary data"),
-                    mimeType: z.string().optional().describe("MIME type of the data"),
-                    filename: z.string().optional().describe("Filename for the upload"),
-                }).optional()
-                    .describe("Direct blob data from fetch-url tool"),
+                timeout: z.number().default(30000)
+                    .describe("Timeout in ms for browser-based fetch (default: 30000)"),
             }),
-            handler: async ({ text, url, tabId, expiration, filename, encrypt, blob }, ctx) => {
-                // Validate input: exactly one of text, url, or blob must be provided
-                const inputs = [text, url, blob].filter(Boolean).length;
-                if (inputs === 0) {
+            handler: async ({ text, url, tabId, expiration, filename, encrypt, timeout }, ctx) => {
+                // Validate input: exactly one of text or url must be provided
+                if (!text && !url) {
                     return {
-                        content: [{ type: "text" as const, text: "Error: One of 'text', 'url', or 'blob' must be provided", isError: true }],
+                        content: [{ type: "text" as const, text: "Error: Either 'text' or 'url' must be provided", isError: true }],
                     };
                 }
-                if (inputs > 1) {
+                if (text && url) {
                     return {
-                        content: [{ type: "text" as const, text: "Error: Provide only one of 'text', 'url', or 'blob'", isError: true }],
+                        content: [{ type: "text" as const, text: "Error: Provide either 'text' or 'url', not both", isError: true }],
                     };
                 }
 
@@ -152,8 +149,13 @@ Options:
                     } else if (url) {
                         if (url.startsWith("blob:")) {
                             // Fetch blob content from browser tab
+                            if (!tabId) {
+                                return {
+                                    content: [{ type: "text" as const, text: "Error: blob: URLs require tabId parameter", isError: true }],
+                                };
+                            }
                             ctx.logger.info(`Fetching blob URL from tab ${tabId}: ${url}`);
-                            const blobResult = await ctx.browserApi.fetchBlobUrl(tabId!, url);
+                            const blobResult = await ctx.browserApi.fetchBlobUrl(tabId, url);
 
                             if (blobResult.error) {
                                 return {
@@ -172,47 +174,92 @@ Options:
 
                             // Try to determine filename from mimeType if not provided
                             if (!contentFilename && blobResult.mimeType) {
-                                const ext = blobResult.mimeType.split("/")[1] || "bin";
+                                const ext = blobResult.mimeType.split("/")[1]?.split(";")[0] || "bin";
                                 contentFilename = `blob.${ext}`;
                             }
 
                             ctx.logger.info(`Blob URL fetched: ${blobResult.size} bytes, type: ${blobResult.mimeType}`);
-                        } else {
-                            // Download from URL
-                            ctx.logger.info(`Downloading from URL: ${url}`);
-                            const response = await fetch(url);
-                            if (!response.ok) {
+                        } else if (url.startsWith("file://")) {
+                            // Read from local filesystem
+                            const filePath = url.replace("file://", "");
+                            ctx.logger.info(`Reading local file: ${filePath}`);
+
+                            const fs = await import("fs/promises");
+                            const path = await import("path");
+
+                            try {
+                                content = await fs.readFile(filePath);
+
+                                // Extract filename from path if not provided
+                                if (!contentFilename) {
+                                    contentFilename = path.basename(filePath);
+                                }
+
+                                ctx.logger.info(`Local file read: ${content.length} bytes`);
+                            } catch (e: any) {
                                 return {
-                                    content: [{ type: "text" as const, text: `Error: Failed to download from URL: ${response.status} ${response.statusText}`, isError: true }],
+                                    content: [{ type: "text" as const, text: `Error: Failed to read file: ${e.message}`, isError: true }],
                                 };
                             }
+                        } else {
+                            // http:// or https:// URL - use browser context for auth/cookies
+                            ctx.logger.info(`Downloading from URL via browser: ${url}`);
 
-                            // Get content as buffer
-                            const arrayBuffer = await response.arrayBuffer();
-                            content = Buffer.from(arrayBuffer);
+                            try {
+                                const fetchResult = await ctx.browserApi.fetchUrl(url, tabId, { timeout });
 
-                            // Try to extract filename from URL if not provided
-                            if (!contentFilename) {
-                                const urlPath = new URL(url).pathname;
-                                const urlFilename = urlPath.split("/").pop();
-                                if (urlFilename && urlFilename.includes(".")) {
-                                    contentFilename = urlFilename;
+                                if (fetchResult.error) {
+                                    return {
+                                        content: [{ type: "text" as const, text: `Error: Failed to download from URL: ${fetchResult.error}`, isError: true }],
+                                    };
+                                }
+
+                                if (!fetchResult.data) {
+                                    return {
+                                        content: [{ type: "text" as const, text: "Error: No data received from URL", isError: true }],
+                                    };
+                                }
+
+                                // Decode base64 data
+                                content = Buffer.from(fetchResult.data, "base64");
+
+                                // Use fetched filename if not provided
+                                if (!contentFilename && fetchResult.filename) {
+                                    contentFilename = fetchResult.filename;
+                                }
+
+                                // Try to extract filename from URL if still not provided
+                                if (!contentFilename) {
+                                    const urlPath = new URL(url).pathname;
+                                    const urlFilename = urlPath.split("/").pop();
+                                    if (urlFilename && urlFilename.includes(".")) {
+                                        contentFilename = decodeURIComponent(urlFilename);
+                                    }
+                                }
+
+                                ctx.logger.info(`URL fetched: ${fetchResult.size} bytes, type: ${fetchResult.mimeType}`);
+                            } catch (e: any) {
+                                // Fallback to direct fetch if browser extension not available
+                                ctx.logger.warn(`Browser fetch failed, trying direct fetch: ${e.message}`);
+
+                                const response = await fetch(url);
+                                if (!response.ok) {
+                                    return {
+                                        content: [{ type: "text" as const, text: `Error: Failed to download from URL: ${response.status} ${response.statusText}`, isError: true }],
+                                    };
+                                }
+
+                                const arrayBuffer = await response.arrayBuffer();
+                                content = Buffer.from(arrayBuffer);
+
+                                if (!contentFilename) {
+                                    const urlPath = new URL(url).pathname;
+                                    const urlFilename = urlPath.split("/").pop();
+                                    if (urlFilename && urlFilename.includes(".")) {
+                                        contentFilename = decodeURIComponent(urlFilename);
+                                    }
                                 }
                             }
-                        }
-                    } else if (blob) {
-                        // Use direct blob data
-                        ctx.logger.info(`Using direct blob data: ${blob.data.length} chars base64`);
-                        content = Buffer.from(blob.data, "base64");
-
-                        // Use blob's filename if not overridden
-                        if (!contentFilename && blob.filename) {
-                            contentFilename = blob.filename;
-                        }
-                        // Try to determine filename from mimeType if still not set
-                        if (!contentFilename && blob.mimeType) {
-                            const ext = blob.mimeType.split("/")[1] || "bin";
-                            contentFilename = `blob.${ext}`;
                         }
                     } else {
                         return {

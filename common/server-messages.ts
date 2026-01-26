@@ -139,6 +139,7 @@ export interface FetchUrlServerMessage extends ServerMessageBase {
   options?: {
     referrer?: string;
     headers?: Record<string, string>;
+    fetchMode?: "background" | "tab";  // background = extension fetch, tab = in-page fetch (bypasses CORS)
   };
 }
 

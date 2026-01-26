@@ -420,16 +420,23 @@ export class BrowserAPI {
     options?: {
       referrer?: string;
       headers?: Record<string, string>;
+      timeout?: number;
+      fetchMode?: "background" | "tab";
     }
   ): Promise<FetchedUrlDataExtensionMessage> {
     const correlationId = this.sendMessageToExtension({
       cmd: "fetch-url",
       url,
       tabId,
-      options,
+      options: {
+        referrer: options?.referrer,
+        headers: options?.headers,
+        fetchMode: options?.fetchMode,
+      },
     });
-    // Use a longer timeout for potentially large files
-    return await this.waitForResponse(correlationId, "fetched-url-data", 30000);
+    // Default timeout 30s, configurable for large files
+    const timeout = options?.timeout ?? 30000;
+    return await this.waitForResponse(correlationId, "fetched-url-data", timeout);
   }
 
   private createSignature(payload: string): string {

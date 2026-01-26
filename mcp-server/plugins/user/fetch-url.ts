@@ -27,26 +27,26 @@ URL Types:
 Features:
 - Uses browser context by default (handles auth, cookies, anti-bot protection)
 - Can optionally use server-side fetch for direct downloads
-- Returns base64 data for use with save-to-pastebin
 - Optionally saves to local file
 
 Download Method:
-- "browser" (default): Uses Firefox extension, handles authentication and bypasses CORS
+- "browser" (default): Uses Firefox extension, handles authentication
 - "server": Direct Node.js fetch, faster for large public files but no auth
+- "tab": Execute fetch inside page context (requires tabId, bypasses CORS)
 - "auto": Smart selection based on context (browser-first, auto-fallback)`,
             schema: z.object({
                 url: z.string()
                     .describe("URL to download (http://, https://, or blob:)"),
                 tabId: z.number().optional()
-                    .describe("Tab ID. Required for blob: URLs, optional for others (provides cookies/referrer)."),
+                    .describe("Tab ID. Required for blob: and tab mode, optional for others."),
                 savePath: z.string().optional()
-                    .describe("Local path to save file. If not specified, only returns base64 data."),
-                returnBlob: z.boolean().default(true)
-                    .describe("Return base64 data in response. Set false if only saving to file."),
-                downloadMethod: z.enum(["browser", "server", "auto"]).default("auto")
-                    .describe("Download method: 'browser' (auth support), 'server' (direct), 'auto' (smart selection)")
+                    .describe("Local path to save file. If not specified, only returns metadata."),
+                downloadMethod: z.enum(["browser", "server", "tab", "auto"]).default("auto")
+                    .describe("Download method: 'browser' (background), 'server' (direct), 'tab' (in-page, bypasses CORS), 'auto'"),
+                timeout: z.number().default(30000)
+                    .describe("Timeout in milliseconds for browser-based fetch (default: 30000)")
             }),
-            handler: async ({ url, tabId, savePath, returnBlob, downloadMethod }, ctx) => {
+            handler: async ({ url, tabId, savePath, downloadMethod, timeout }, ctx) => {
                 ctx.logger.info(`Fetching URL: ${url}`, { downloadMethod, tabId, savePath });
 
                 let data: string | undefined;
@@ -93,14 +93,37 @@ Download Method:
                 } else {
                     // Regular HTTP(S) URL
                     // Determine which method to use
+                    const shouldUseTab = downloadMethod === "tab";
                     const shouldUseBrowser = downloadMethod === "browser" ||
                         (downloadMethod === "auto" && true); // Default to browser for auto
 
-                    if (shouldUseBrowser) {
+                    if (shouldUseTab) {
+                        // Tab mode: Execute fetch inside page context to bypass CORS
+                        if (!tabId) {
+                            error = "Tab mode requires tabId parameter";
+                        } else {
+                            try {
+                                ctx.logger.info("Using tab-based fetch (in-page context)");
+                                const result = await ctx.browserApi.fetchUrl(url, tabId, { timeout, fetchMode: "tab" });
+
+                                if (result.error) {
+                                    error = result.error;
+                                } else {
+                                    data = result.data;
+                                    mimeType = result.mimeType;
+                                    size = result.size;
+                                    filename = result.filename;
+                                    usedMethod = "browser"; // Using browser but in-page
+                                }
+                            } catch (e) {
+                                error = `Tab fetch exception: ${String(e)}`;
+                            }
+                        }
+                    } else if (shouldUseBrowser) {
                         // Try browser-based fetch first
                         try {
                             ctx.logger.info("Using browser-based fetch");
-                            const result = await ctx.browserApi.fetchUrl(url, tabId);
+                            const result = await ctx.browserApi.fetchUrl(url, tabId, { timeout });
 
                             if (result.error) {
                                 // If browser fails and method is "auto", fall back to server
@@ -198,7 +221,7 @@ Download Method:
                     }
                 }
 
-                // Build response
+                // Build response - simple metadata summary
                 const resultParts: string[] = [
                     `Downloaded: ${url}`,
                     `- Size: ${size?.toLocaleString() || "unknown"} bytes`,
@@ -211,40 +234,11 @@ Download Method:
                     resultParts.push(`- Saved to: ${savePath}`);
                 }
 
-                // Include blob data for use with save-to-pastebin
-                const responseContent: any[] = [{
-                    type: "text" as const,
-                    text: resultParts.join("\n"),
-                }];
-
-                // Return blob info as structured data if requested
-                if (returnBlob && data) {
-                    responseContent.push({
-                        type: "text" as const,
-                        text: `\n\nBlob data available (${size?.toLocaleString() || "?"} bytes, ${mimeType || "unknown"}).` +
-                            `\nUse with save-to-pastebin by passing the blob parameter:` +
-                            `\n  blob: { data: "<base64>", mimeType: "${mimeType || ""}", filename: "${filename || ""}" }`,
-                    });
-
-                    // Include the actual data as an embedded resource
-                    responseContent.push({
-                        type: "resource" as const,
-                        resource: {
-                            uri: `data:${mimeType || "application/octet-stream"};base64,${data.substring(0, 100)}...`,
-                            mimeType: mimeType || "application/octet-stream",
-                            blob: data,
-                            text: JSON.stringify({
-                                data,
-                                mimeType,
-                                size,
-                                filename,
-                            }),
-                        },
-                    });
-                }
-
                 return {
-                    content: responseContent,
+                    content: [{
+                        type: "text" as const,
+                        text: resultParts.join("\n"),
+                    }],
                 };
             },
         },
