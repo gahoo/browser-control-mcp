@@ -171,6 +171,16 @@ export interface BlobDataExtensionMessage extends ExtensionMessageBase {
   error?: string;
 }
 
+export interface FetchedUrlDataExtensionMessage extends ExtensionMessageBase {
+  resource: "fetched-url-data";
+  url: string;
+  data?: string;  // Base64 encoded
+  mimeType?: string;
+  size?: number;
+  filename?: string;  // Extracted from Content-Disposition or URL
+  error?: string;
+}
+
 export type ExtensionMessage =
   | TabContentExtensionMessage
   | TabsExtensionMessage
@@ -189,7 +199,8 @@ export type ExtensionMessage =
   | TabReloadedExtensionMessage
   | TabReloadedExtensionMessage
   | InterceptedMediaResourcesExtensionMessage
-  | BlobDataExtensionMessage;
+  | BlobDataExtensionMessage
+  | FetchedUrlDataExtensionMessage;
 
 export interface ExtensionError {
   correlationId: string;

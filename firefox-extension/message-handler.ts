@@ -110,6 +110,9 @@ export class MessageHandler {
       case "fetch-blob-url":
         await this.fetchBlobUrl(req.correlationId, req.tabId, req.blobUrl);
         break;
+      case "fetch-url":
+        await this.fetchUrl(req.correlationId, req.url, req.tabId, req.options);
+        break;
       default:
         const _exhaustiveCheck: never = req;
         console.error("[MessageHandler] Invalid message received:", req);
@@ -125,7 +128,7 @@ export class MessageHandler {
     if ("url" in req && req.url) {
       contextUrl = req.url;
     }
-    if ("tabId" in req) {
+    if ("tabId" in req && req.tabId !== undefined) {
       try {
         const tab = await browser.tabs.get(req.tabId);
         contextUrl = tab.url;
@@ -1090,6 +1093,123 @@ export class MessageHandler {
         correlationId,
         tabId,
         blobUrl,
+        error: error.message,
+      });
+    }
+  }
+
+  private async fetchUrl(
+    correlationId: string,
+    url: string,
+    tabId?: number,
+    options?: {
+      referrer?: string;
+      headers?: Record<string, string>;
+    }
+  ): Promise<void> {
+    console.log("[MessageHandler] Fetching URL:", { url, tabId, options });
+
+    try {
+      // Build fetch options
+      const fetchOptions: RequestInit = {
+        method: "GET",
+        credentials: "include", // Include cookies for same-origin requests
+      };
+
+      // Add custom headers if provided
+      if (options?.headers) {
+        fetchOptions.headers = options.headers;
+      }
+
+      // Add referrer if provided or use tab URL
+      if (options?.referrer) {
+        fetchOptions.referrer = options.referrer;
+      } else if (tabId) {
+        try {
+          const tab = await browser.tabs.get(tabId);
+          if (tab.url) {
+            fetchOptions.referrer = tab.url;
+          }
+        } catch (e) {
+          console.warn("[MessageHandler] Could not get tab for referrer:", e);
+        }
+      }
+
+      // Perform the fetch (extension context bypasses CORS)
+      const response = await fetch(url, fetchOptions);
+
+      if (!response.ok) {
+        await this.client.sendResourceToServer({
+          resource: "fetched-url-data",
+          correlationId,
+          url,
+          error: `HTTP ${response.status}: ${response.statusText}`,
+        });
+        return;
+      }
+
+      // Extract filename from Content-Disposition header or URL
+      let filename: string | undefined;
+      const contentDisposition = response.headers.get("content-disposition");
+      if (contentDisposition) {
+        const filenameMatch = contentDisposition.match(/filename[*]?=(?:UTF-8'')?["']?([^"';\n]+)["']?/i);
+        if (filenameMatch) {
+          filename = decodeURIComponent(filenameMatch[1]);
+        }
+      }
+      if (!filename) {
+        // Try to extract from URL path
+        try {
+          const urlPath = new URL(url).pathname;
+          const pathFilename = urlPath.split("/").pop();
+          if (pathFilename && pathFilename.includes(".")) {
+            filename = decodeURIComponent(pathFilename);
+          }
+        } catch (e) {
+          // Ignore URL parsing errors
+        }
+      }
+
+      // Get content type
+      const mimeType = response.headers.get("content-type")?.split(";")[0].trim();
+
+      // Read response as blob and convert to base64
+      const blob = await response.blob();
+      const reader = new FileReader();
+
+      const base64Data = await new Promise<string>((resolve, reject) => {
+        reader.onloadend = () => {
+          const result = reader.result as string;
+          // Remove data:...;base64, prefix
+          const base64 = result.split(",")[1];
+          resolve(base64);
+        };
+        reader.onerror = () => reject(new Error("FileReader error"));
+        reader.readAsDataURL(blob);
+      });
+
+      console.log("[MessageHandler] URL fetched successfully:", {
+        url,
+        size: blob.size,
+        mimeType,
+        filename,
+      });
+
+      await this.client.sendResourceToServer({
+        resource: "fetched-url-data",
+        correlationId,
+        url,
+        data: base64Data,
+        mimeType: mimeType || blob.type,
+        size: blob.size,
+        filename,
+      });
+    } catch (error: any) {
+      console.error("[MessageHandler] Failed to fetch URL:", { url, error: error.message });
+      await this.client.sendResourceToServer({
+        resource: "fetched-url-data",
+        correlationId,
+        url,
         error: error.message,
       });
     }

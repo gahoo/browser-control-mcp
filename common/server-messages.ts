@@ -132,6 +132,16 @@ export interface FetchBlobUrlServerMessage extends ServerMessageBase {
   blobUrl: string;
 }
 
+export interface FetchUrlServerMessage extends ServerMessageBase {
+  cmd: "fetch-url";
+  tabId?: number;  // Optional: context tab for cookies/referrer
+  url: string;
+  options?: {
+    referrer?: string;
+    headers?: Record<string, string>;
+  };
+}
+
 export type ServerMessage =
   | OpenTabServerMessage
   | CloseTabsServerMessage
@@ -151,6 +161,7 @@ export type ServerMessage =
   | ReloadTabServerMessage
   | InstallMediaInterceptorServerMessage
   | GetInterceptedMediaResourcesServerMessage
-  | FetchBlobUrlServerMessage;
+  | FetchBlobUrlServerMessage
+  | FetchUrlServerMessage;
 
 export type ServerMessageRequest = ServerMessage & { correlationId: string };

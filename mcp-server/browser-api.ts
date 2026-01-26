@@ -14,6 +14,7 @@ import type {
   MarkdownContentExtensionMessage,
   InterceptedMediaResourcesExtensionMessage,
   BlobDataExtensionMessage,
+  FetchedUrlDataExtensionMessage,
 } from "@browser-control-mcp/common";
 import { isPortInUse } from "./util";
 import { logger } from "./logger";
@@ -411,6 +412,24 @@ export class BrowserAPI {
       blobUrl,
     });
     return await this.waitForResponse(correlationId, "blob-data");
+  }
+
+  async fetchUrl(
+    url: string,
+    tabId?: number,
+    options?: {
+      referrer?: string;
+      headers?: Record<string, string>;
+    }
+  ): Promise<FetchedUrlDataExtensionMessage> {
+    const correlationId = this.sendMessageToExtension({
+      cmd: "fetch-url",
+      url,
+      tabId,
+      options,
+    });
+    // Use a longer timeout for potentially large files
+    return await this.waitForResponse(correlationId, "fetched-url-data", 30000);
   }
 
   private createSignature(payload: string): string {

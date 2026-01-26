@@ -89,6 +89,7 @@ export default definePlugin({
 Content types:
 - text: Direct text content. If single-line URL, creates a redirect
 - url: Download from URL and upload. For blob: URLs, requires tabId
+- blob: Direct binary data (from fetch-url tool)
 
 Options:
 - expiration: Time until paste expires (e.g., "7d", "1h", "30m")
@@ -107,17 +108,24 @@ Options:
                     .describe("Filename for the upload"),
                 encrypt: z.boolean().default(false)
                     .describe("Enable AES-GCM encryption"),
+                blob: z.object({
+                    data: z.string().describe("Base64 encoded binary data"),
+                    mimeType: z.string().optional().describe("MIME type of the data"),
+                    filename: z.string().optional().describe("Filename for the upload"),
+                }).optional()
+                    .describe("Direct blob data from fetch-url tool"),
             }),
-            handler: async ({ text, url, tabId, expiration, filename, encrypt }, ctx) => {
-                // Validate input: exactly one of text or url must be provided
-                if (!text && !url) {
+            handler: async ({ text, url, tabId, expiration, filename, encrypt, blob }, ctx) => {
+                // Validate input: exactly one of text, url, or blob must be provided
+                const inputs = [text, url, blob].filter(Boolean).length;
+                if (inputs === 0) {
                     return {
-                        content: [{ type: "text" as const, text: "Error: Either 'text' or 'url' must be provided", isError: true }],
+                        content: [{ type: "text" as const, text: "Error: One of 'text', 'url', or 'blob' must be provided", isError: true }],
                     };
                 }
-                if (text && url) {
+                if (inputs > 1) {
                     return {
-                        content: [{ type: "text" as const, text: "Error: Provide either 'text' or 'url', not both", isError: true }],
+                        content: [{ type: "text" as const, text: "Error: Provide only one of 'text', 'url', or 'blob'", isError: true }],
                     };
                 }
 
@@ -191,6 +199,20 @@ Options:
                                     contentFilename = urlFilename;
                                 }
                             }
+                        }
+                    } else if (blob) {
+                        // Use direct blob data
+                        ctx.logger.info(`Using direct blob data: ${blob.data.length} chars base64`);
+                        content = Buffer.from(blob.data, "base64");
+
+                        // Use blob's filename if not overridden
+                        if (!contentFilename && blob.filename) {
+                            contentFilename = blob.filename;
+                        }
+                        // Try to determine filename from mimeType if still not set
+                        if (!contentFilename && blob.mimeType) {
+                            const ext = blob.mimeType.split("/")[1] || "bin";
+                            contentFilename = `blob.${ext}`;
                         }
                     } else {
                         return {
