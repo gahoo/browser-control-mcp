@@ -395,6 +395,8 @@ mcpServer.tool(
    the main content (removing clutter like ads, navigation, etc.) and returns structured 
    Markdown with metadata (author, date, etc). 
    
+   Use cssSelector to extract content from a specific element instead of the entire page.
+   
    Best for: news articles, blog posts, documentation pages.
    Alternative: use 'get-tab-web-content' for raw text without formatting.`,
   {
@@ -403,9 +405,13 @@ mcpServer.tool(
       .number()
       .optional()
       .describe("Max content length (default: 100000)"),
+    cssSelector: z
+      .string()
+      .optional()
+      .describe("CSS selector to extract specific element (e.g., '#main-content', '.article-body')"),
   },
-  async ({ tabId, maxLength }) => {
-    const result = await browserApi.getMarkdownContent(tabId, { maxLength });
+  async ({ tabId, maxLength, cssSelector }) => {
+    const result = await browserApi.getMarkdownContent(tabId, { maxLength, cssSelector });
 
     const { markdown, metadata, statistics } = result.content;
 

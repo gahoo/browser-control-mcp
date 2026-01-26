@@ -735,7 +735,7 @@ export class MessageHandler {
   private async sendMarkdownContent(
     correlationId: string,
     tabId: number,
-    options?: { maxLength?: number }
+    options?: { maxLength?: number; cssSelector?: string }
   ): Promise<void> {
     const tab = await browser.tabs.get(tabId);
     if (tab.url && (await isDomainInDenyList(tab.url))) {
@@ -744,8 +744,11 @@ export class MessageHandler {
 
     await this.checkForUrlPermission(tab.url);
 
-    // Clear any previous result and execute the extractor script
-    await browser.tabs.executeScript(tabId, { code: "window.__extractionResult = undefined;" });
+    // Clear any previous result and set extraction options
+    const extractionOptions = options?.cssSelector ? { cssSelector: options.cssSelector } : undefined;
+    await browser.tabs.executeScript(tabId, {
+      code: `window.__extractionResult = undefined; window.__extractionOptions = ${JSON.stringify(extractionOptions)};`
+    });
     await browser.tabs.executeScript(tabId, { file: "dist/extractor.js" });
 
     // Retrieve the result from the global variable

@@ -17,11 +17,29 @@ export interface ExtractedContent {
     };
 }
 
-export function extractContent(doc: Document, url: string): ExtractedContent {
+export interface ExtractOptions {
+    cssSelector?: string;
+}
+
+export function extractContent(doc: Document, url: string, options?: ExtractOptions): ExtractedContent {
     const startTime = performance.now();
 
+    let targetDoc: Document = doc;
+
+    // If cssSelector is provided, create a temporary document with just the selected element
+    if (options?.cssSelector) {
+        const targetElement = doc.querySelector(options.cssSelector);
+        if (!targetElement) {
+            throw new Error(`No element found matching selector: ${options.cssSelector}`);
+        }
+
+        // Create a temporary document and clone the target element into it
+        targetDoc = doc.implementation.createHTMLDocument('temp');
+        targetDoc.body.appendChild(targetElement.cloneNode(true));
+    }
+
     // Initialize Defuddle and parse
-    const defuddle = new Defuddle(doc);
+    const defuddle = new Defuddle(targetDoc);
     const result = defuddle.parse();
 
     const endTime = performance.now();

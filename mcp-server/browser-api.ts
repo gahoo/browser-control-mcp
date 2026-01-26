@@ -219,7 +219,7 @@ export class BrowserAPI {
 
   async getMarkdownContent(
     tabId: number,
-    options?: { maxLength?: number }
+    options?: { maxLength?: number; cssSelector?: string }
   ): Promise<MarkdownContentExtensionMessage> {
     const correlationId = this.sendMessageToExtension({
       cmd: "get-tab-markdown-content",
