@@ -7,10 +7,11 @@
     "tabs",
     "tabGroups",
     "history",
-    "storage"
+    "storage",
+    "<all_urls>"
   ],
   "optional_permissions": [
-    "*://*/*",
+    "activeTab",
     "find"
   ],
   "web_accessible_resources": [

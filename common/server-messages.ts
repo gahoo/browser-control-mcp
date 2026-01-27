@@ -144,6 +144,14 @@ export interface FetchUrlServerMessage extends ServerMessageBase {
   };
 }
 
+export interface TakeSnapshotServerMessage extends ServerMessageBase {
+  cmd: "take-snapshot";
+  tabId: number;
+  selector?: string;
+  method?: "native" | "readability";
+  scroll?: boolean;
+}
+
 export type ServerMessage =
   | OpenTabServerMessage
   | CloseTabsServerMessage
@@ -164,6 +172,7 @@ export type ServerMessage =
   | InstallMediaInterceptorServerMessage
   | GetInterceptedMediaResourcesServerMessage
   | FetchBlobUrlServerMessage
-  | FetchUrlServerMessage;
+  | FetchUrlServerMessage
+  | TakeSnapshotServerMessage;
 
 export type ServerMessageRequest = ServerMessage & { correlationId: string };

@@ -113,6 +113,9 @@ export class MessageHandler {
       case "fetch-url":
         await this.fetchUrl(req.correlationId, req.url, req.tabId, req.options);
         break;
+      case "take-snapshot":
+        await this.takeSnapshot(req.correlationId, req.tabId, req.selector, req.method, req.scroll);
+        break;
       default:
         const _exhaustiveCheck: never = req;
         console.error("[MessageHandler] Invalid message received:", req);
@@ -790,8 +793,251 @@ export class MessageHandler {
         markdown,
         metadata,
         statistics,
+
       },
       isTruncated,
+    });
+  }
+
+  private async captureTab(windowId: number): Promise<string> {
+    const tabsApi = (browser as any).tabs;
+    const windowsApi = (browser as any).windows;
+    const chromeApi = (globalThis as any).chrome?.tabs;
+
+    if (tabsApi?.captureVisibleTab) {
+      try {
+        return await tabsApi.captureVisibleTab(windowId, { format: "png" });
+      } catch (e: any) {
+        if (e.message?.includes("activeTab")) {
+          console.warn("[MessageHandler] captureVisibleTab(windowId) failed, trying windowless fallback...");
+          return await tabsApi.captureVisibleTab({ format: "png" });
+        }
+        throw e;
+      }
+    }
+    if (windowsApi?.captureVisibleTab) {
+      return await windowsApi.captureVisibleTab(windowId, { format: "png" });
+    }
+    if (chromeApi?.captureVisibleTab) {
+      return new Promise((resolve, reject) => {
+        chromeApi.captureVisibleTab(windowId, { format: "png" }, (dataUrl: string) => {
+          if ((globalThis as any).chrome.runtime.lastError) {
+            reject(new Error((globalThis as any).chrome.runtime.lastError.message));
+          } else {
+            resolve(dataUrl);
+          }
+        });
+      });
+    }
+
+    throw new Error(
+      `captureVisibleTab is not available. (tabs: ${!!tabsApi}, tabs.cap: ${!!tabsApi?.captureVisibleTab}, windows.cap: ${!!windowsApi?.captureVisibleTab}). ` +
+      "This usually means mandatory host permissions (*://*/*) were not correctly declared in manifest. " +
+      "Please ensure you have reloaded the extension after the latest manifest update."
+    );
+  }
+
+  private async takeSnapshot(
+    correlationId: string,
+    tabId: number,
+    selector?: string,
+    method: "native" | "readability" = "native",
+    scroll?: boolean
+  ): Promise<void> {
+    try {
+      const tab = await browser.tabs.get(tabId);
+      if (tab.url && (await isDomainInDenyList(tab.url))) {
+        throw new Error(`Domain in tab URL is in the deny list`);
+      }
+      await this.checkForUrlPermission(tab.url);
+
+      // 1. Prepare Content: Get metrics and isolate element
+      const prepareResult = await browser.tabs.executeScript(tabId, {
+        code: `
+          (function() {
+            const selector = ${JSON.stringify(selector || null)};
+            const method = ${JSON.stringify(method)};
+            // If scroll is explicitly false, we don't scroll. 
+            // If scroll is undefined, we scroll if we have a selector.
+            const shouldScroll = ${scroll !== undefined ? scroll : selector !== null};
+            
+            // 1. Readability Cleaning (Heuristic)
+            const originalDisplayStates = [];
+            if (method === 'readability') {
+              const distractionSelectors = [
+                'nav', 'footer', 'header:not(article header)', 'aside', 
+                '.ads', '.ad-container', '.sidebar', '#sidebar', '.nav', '.footer',
+                'section[role="complementary"]', 'div[class*="ad-"]'
+              ];
+              const distractions = document.querySelectorAll(distractionSelectors.join(','));
+              distractions.forEach(el => {
+                originalDisplayStates.push({ el, elDisplay: el.style.display });
+                el.style.display = 'none';
+              });
+            }
+            
+            let target = document.documentElement;
+            if (selector) {
+              const el = document.querySelector(selector);
+              if (!el) {
+                // Restore if we cleaned
+                originalDisplayStates.forEach(item => item.el.style.display = item.elDisplay);
+                return { error: "Element not found: " + selector };
+              }
+              target = el;
+            }
+
+            // Store original styles to restore later
+            const originalOverflow = document.documentElement.style.overflow;
+            
+            // Hide fixed/sticky elements that might interfere during scrolling
+            const fixedElements = Array.from(document.querySelectorAll('*')).filter(el => {
+              const style = window.getComputedStyle(el);
+              return style.position === 'fixed' || style.position === 'sticky';
+            });
+            const originalFixedDisplays = fixedElements.map(el => ({ el, elDisplay: el.style.display }));
+
+            window.__snapshotRestore = () => {
+              document.documentElement.style.overflow = originalOverflow;
+              originalFixedDisplays.forEach(item => item.el.style.display = item.elDisplay);
+              originalDisplayStates.forEach(item => item.el.style.display = item.elDisplay);
+              delete window.__snapshotRestore;
+            };
+
+            if (!shouldScroll) {
+              return {
+                viewportOnly: true,
+                devicePixelRatio: window.devicePixelRatio
+              };
+            }
+
+            // For full element capture, hide scrollbars and fixed elements
+            document.documentElement.style.overflow = 'hidden';
+            fixedElements.forEach(el => el.style.display = 'none');
+
+            // Recalculate dimensions after hiding distractions
+            let rect = target.getBoundingClientRect();
+            let width = rect.width;
+            let height = rect.height;
+
+            // If it's body or html, use scrollHeight/Width to get EVERYTHING
+            if (target === document.body || target === document.documentElement) {
+              width = Math.max(document.documentElement.scrollWidth, document.body.scrollWidth);
+              height = Math.max(document.documentElement.scrollHeight, document.body.scrollHeight);
+            }
+
+            const scrollX = window.scrollX;
+            const scrollY = window.scrollY;
+
+            return {
+              rect: {
+                x: rect.left + scrollX,
+                y: rect.top + scrollY,
+                width: width,
+                height: height
+              },
+              viewport: {
+                width: window.innerWidth,
+                height: window.innerHeight
+              },
+              devicePixelRatio: window.devicePixelRatio
+            };
+          })();
+        `
+      });
+
+      const info = prepareResult[0];
+      if (info.error) throw new Error(info.error);
+
+      // 2. Capture Logic
+      let finalDataUrl: string;
+
+      if (info.viewportOnly) {
+        // Simple viewport capture
+        if (tab.windowId === undefined) throw new Error("Tab windowId is undefined");
+        finalDataUrl = await this.captureTab(tab.windowId);
+      } else {
+        // Multi-segment capture (Scroll & Stitch)
+        const { rect, viewport, devicePixelRatio } = info;
+
+        // Create canvas for stitching
+        const canvas = document.createElement('canvas');
+        canvas.width = rect.width * devicePixelRatio;
+        canvas.height = rect.height * devicePixelRatio;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) throw new Error("Failed to create canvas context");
+
+        const xSteps = Math.ceil(rect.width / viewport.width);
+        const ySteps = Math.ceil(rect.height / viewport.height);
+
+        for (let y = 0; y < ySteps; y++) {
+          for (let x = 0; x < xSteps; x++) {
+            const targetX = rect.x + (x * viewport.width);
+            const targetY = rect.y + (y * viewport.height);
+
+            // Scroll to segment and return actual scroll position
+            const scrollResult = await browser.tabs.executeScript(tabId, {
+              code: `window.scrollTo(${targetX}, ${targetY}); [window.scrollX, window.scrollY]`
+            });
+            const [actualX, actualY] = (scrollResult[0] as [number, number]);
+
+            // Wait for paint/rendering
+            await new Promise(r => setTimeout(r, 150));
+
+            // Capture
+            if (tab.windowId === undefined) throw new Error("Tab windowId is undefined");
+            const dataUrl = await this.captureTab(tab.windowId);
+
+            // Load into image and draw onto canvas
+            const img = await this.loadImage(dataUrl);
+
+            // Calculate offsets
+            // targetX/Y is where we WANTED the top-left of the viewport to be.
+            // actualX/Y is where it ACTUALLY is.
+            // deltaX/Y is the shift within the captured image.
+            // e.g. Wanted 1000, Got 900. Pixel 1000 is at +100 in the image.
+            const deltaX = (targetX - actualX) * devicePixelRatio;
+            const deltaY = (targetY - actualY) * devicePixelRatio;
+
+            const destX = (x * viewport.width) * devicePixelRatio;
+            const destY = (y * viewport.height) * devicePixelRatio;
+
+            // Draw correctly offset
+            // We shift the drawing position UP/LEFT by delta to align the target pixel with dest
+            ctx.drawImage(img, destX - deltaX, destY - deltaY);
+          }
+        }
+
+        finalDataUrl = canvas.toDataURL("image/png");
+
+        // 3. Cleanup
+        await browser.tabs.executeScript(tabId, {
+          code: `if (window.__snapshotRestore) window.__snapshotRestore();`
+        });
+      }
+
+      await this.client.sendResourceToServer({
+        resource: "snapshot-result",
+        correlationId,
+        data: finalDataUrl
+      });
+
+    } catch (error: any) {
+      console.error("[MessageHandler] takeSnapshot failed:", error);
+      await this.client.sendResourceToServer({
+        resource: "snapshot-result",
+        correlationId,
+        error: error.message || String(error)
+      });
+    }
+  }
+
+  private loadImage(dataUrl: string): Promise<HTMLImageElement> {
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      img.onload = () => resolve(img);
+      img.onerror = (e) => reject(new Error("Failed to load captured image segment"));
+      img.src = dataUrl;
     });
   }
 

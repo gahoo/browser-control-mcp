@@ -15,6 +15,7 @@ import type {
   InterceptedMediaResourcesExtensionMessage,
   BlobDataExtensionMessage,
   FetchedUrlDataExtensionMessage,
+  SnapshotResultExtensionMessage,
 } from "@browser-control-mcp/common";
 import { isPortInUse } from "./util";
 import { logger } from "./logger";
@@ -437,6 +438,23 @@ export class BrowserAPI {
     // Default timeout 30s, configurable for large files
     const timeout = options?.timeout ?? 30000;
     return await this.waitForResponse(correlationId, "fetched-url-data", timeout);
+  }
+
+  async takeSnapshot(
+    tabId: number,
+    selector?: string,
+    method?: "native" | "readability",
+    scroll?: boolean
+  ): Promise<SnapshotResultExtensionMessage> {
+    const correlationId = this.sendMessageToExtension({
+      cmd: "take-snapshot",
+      tabId,
+      selector,
+      method,
+      scroll,
+    });
+    // Taking a snapshot might take a while for large elements
+    return await this.waitForResponse(correlationId, "snapshot-result", 30000);
   }
 
   private createSignature(payload: string): string {

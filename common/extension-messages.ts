@@ -181,6 +181,12 @@ export interface FetchedUrlDataExtensionMessage extends ExtensionMessageBase {
   error?: string;
 }
 
+export interface SnapshotResultExtensionMessage extends ExtensionMessageBase {
+  resource: "snapshot-result";
+  data?: string; // Base64 encoded image data (data:image/png;base64,...)
+  error?: string;
+}
+
 export type ExtensionMessage =
   | TabContentExtensionMessage
   | TabsExtensionMessage
@@ -200,7 +206,8 @@ export type ExtensionMessage =
   | TabReloadedExtensionMessage
   | InterceptedMediaResourcesExtensionMessage
   | BlobDataExtensionMessage
-  | FetchedUrlDataExtensionMessage;
+  | FetchedUrlDataExtensionMessage
+  | SnapshotResultExtensionMessage;
 
 export interface ExtensionError {
   correlationId: string;

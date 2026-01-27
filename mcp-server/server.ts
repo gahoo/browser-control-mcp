@@ -755,6 +755,80 @@ Download Method:
   }
 );
 
+mcpServer.tool(
+  "take-snapshot",
+  `Take a snapshot (screenshot) of a specific element on a web page.
+   
+   Features:
+   - Captures the FULL element, even if it's outside the current viewport (scrolled out).
+   - Returns a base64-encoded PNG image.`,
+  {
+    tabId: z.number().describe("Tab ID to take snapshot from"),
+    selector: z.string().optional().describe("CSS selector of the element to capture. Use 'body' or 'html' for the full page."),
+    savePath: z.string().optional().describe("Local path to save the screenshot as a PNG file."),
+    method: z.enum(["native", "readability"]).default("native").describe("Snapshot method: 'native' for high-fidelity original page, 'readability' to clean using Defuddle first."),
+    scroll: z.boolean().optional().describe("Whether to scroll and stitch multiple captures. If false, only the visible portion is captured. Defaults to true if selector is provided."),
+  },
+  async ({ tabId, selector, savePath, method, scroll }) => {
+    logger.info(`Taking snapshot of tab ${tabId}`, { selector, savePath, method, scroll });
+    const result = await browserApi.takeSnapshot(tabId, selector, method, scroll);
+
+    if (result.error) {
+      return {
+        content: [{ type: "text", text: `Error taking snapshot: ${result.error}`, isError: true }]
+      };
+    }
+
+    if (!result.data) {
+      return {
+        content: [{ type: "text", text: "Error: No data received from snapshot", isError: true }]
+      };
+    }
+
+    const base64Data = result.data.replace(/^data:image\/png;base64,/, "");
+
+    // Save to file if requested
+    if (savePath) {
+      try {
+        const buffer = Buffer.from(base64Data, "base64");
+        const dir = path.dirname(savePath);
+        await fs.mkdir(dir, { recursive: true });
+        await fs.writeFile(savePath, buffer);
+        logger.info(`Saved snapshot to: ${savePath}`);
+      } catch (e) {
+        return {
+          content: [{ type: "text" as const, text: `Error saving snapshot to file: ${String(e)}`, isError: true }],
+        };
+      }
+    }
+
+    if (savePath) {
+      return {
+        content: [
+          {
+            type: "text",
+            text: `Snapshot saved to: ${savePath}${selector ? ` (selector: '${selector}')` : ""}`
+          }
+        ]
+      };
+    }
+
+    return {
+      content: [
+        {
+          type: "image",
+          data: base64Data,
+          mimeType: "image/png"
+        },
+        {
+          type: "text",
+          text: `Snapshot taken${selector ? ` for selector '${selector}'` : ""}!`
+        }
+      ]
+    };
+  }
+);
+
 const browserApi = new BrowserAPI();
 
 // Initialize browser API and load plugins

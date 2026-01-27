@@ -104,6 +104,11 @@ export const AVAILABLE_TOOLS: ToolInfo[] = [
     id: "fetch-url",
     name: "Fetch URL",
     description: "Fetches content from any URL using browser context (handles auth, cookies)"
+  },
+  {
+    id: "take-snapshot",
+    name: "Take Snapshot",
+    description: "Allows the MCP server to take screenshots of web pages or elements"
   }
 ];
 
@@ -128,6 +133,7 @@ export const COMMAND_TO_TOOL_ID: Record<ServerMessageRequest["cmd"], string> = {
   "get-tab-media-resources": "get-tab-media-resources",
   "fetch-blob-url": "fetch-blob-url",
   "fetch-url": "fetch-url",
+  "take-snapshot": "take-snapshot",
 };
 
 // Storage schema for tool settings
