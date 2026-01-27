@@ -800,16 +800,9 @@ mcpServer.tool(
           content: [{ type: "text" as const, text: `Error saving snapshot to file: ${String(e)}`, isError: true }],
         };
       }
-    }
 
-    if (savePath) {
       return {
-        content: [
-          {
-            type: "text",
-            text: `Snapshot saved to: ${savePath}${selector ? ` (selector: '${selector}')` : ""}`
-          }
-        ]
+        content: [{ type: "text" as const, text: `Snapshot saved to ${savePath}` }]
       };
     }
 
@@ -818,16 +811,67 @@ mcpServer.tool(
         {
           type: "image",
           data: base64Data,
-          mimeType: "image/png"
-        },
-        {
-          type: "text",
-          text: `Snapshot taken${selector ? ` for selector '${selector}'` : ""}!`
+          mimeType: "image/png",
         }
       ]
     };
   }
 );
+
+mcpServer.tool(
+  "is-tab-loaded",
+  "Check if a browser tab is fully loaded.",
+  {
+    tabId: z.number().describe("The ID of the tab to check"),
+  },
+  async ({ tabId }) => {
+    const isLoaded = await browserApi.isTabLoaded(tabId);
+    return {
+      content: [
+        {
+          type: "text",
+          text: isLoaded ? "true" : "false",
+        },
+      ],
+    };
+  }
+);
+
+mcpServer.tool(
+  "find-element",
+  "Find elements on a webpage using CSS selectors, XPath, text content, or Regular Expression. Returns a list of found elements with their 0-based index which can be used with click-element.",
+  {
+    tabId: z.number().describe("The ID of the tab to search in"),
+    query: z.string().describe("The search query (selector, xpath, text, or regex pattern)"),
+    mode: z.enum(["css", "xpath", "text", "regexp"]).default("css").describe("The search mode: 'css' (selector), 'xpath', 'text' (substring match), or 'regexp' (regular expression)"),
+  },
+  async ({ tabId, query, mode }) => {
+    const elements = await browserApi.findElement(tabId, query, mode);
+
+    if (elements.length === 0) {
+      return {
+        content: [{ type: "text", text: "No elements found matching the query." }],
+      };
+    }
+
+    const formattedElements = elements.map((el) => {
+      let text = `[${el.index}] <${el.tagName}> "${el.text}"`;
+      if (el.selector) text += ` CSS: ${el.selector}`;
+      if (el.xpath) text += ` XPath: ${el.xpath}`;
+      return text;
+    }).join("\n");
+
+    return {
+      content: [
+        {
+          type: "text",
+          text: `Found ${elements.length} elements:\n${formattedElements}`,
+        },
+      ],
+    };
+  }
+);
+
 
 const browserApi = new BrowserAPI();
 

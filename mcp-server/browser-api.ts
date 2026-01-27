@@ -16,6 +16,9 @@ import type {
   BlobDataExtensionMessage,
   FetchedUrlDataExtensionMessage,
   SnapshotResultExtensionMessage,
+  TabLoadedExtensionMessage,
+  ElementFoundExtensionMessage,
+  FoundElement,
 } from "@browser-control-mcp/common";
 import { isPortInUse } from "./util";
 import { logger } from "./logger";
@@ -455,6 +458,30 @@ export class BrowserAPI {
     });
     // Taking a snapshot might take a while for large elements
     return await this.waitForResponse(correlationId, "snapshot-result", 30000);
+  }
+
+  async isTabLoaded(tabId: number): Promise<boolean> {
+    const correlationId = this.sendMessageToExtension({
+      cmd: "is-tab-loaded",
+      tabId,
+    });
+    const message = await this.waitForResponse(correlationId, "tab-loaded");
+    return message.isLoaded;
+  }
+
+  async findElement(
+    tabId: number,
+    query: string,
+    mode: "css" | "xpath" | "text" | "regexp"
+  ): Promise<FoundElement[]> {
+    const correlationId = this.sendMessageToExtension({
+      cmd: "find-element",
+      tabId,
+      query,
+      mode,
+    });
+    const message = await this.waitForResponse(correlationId, "element-found");
+    return message.elements;
   }
 
   private createSignature(payload: string): string {

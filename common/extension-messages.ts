@@ -187,6 +187,25 @@ export interface SnapshotResultExtensionMessage extends ExtensionMessageBase {
   error?: string;
 }
 
+export interface TabLoadedExtensionMessage extends ExtensionMessageBase {
+  resource: "tab-loaded";
+  isLoaded: boolean;
+}
+
+export interface FoundElement {
+  index: number;
+  tagName: string;
+  text: string;
+  selector: string;
+  xpath: string;
+  isVisible?: boolean;
+}
+
+export interface ElementFoundExtensionMessage extends ExtensionMessageBase {
+  resource: "element-found";
+  elements: FoundElement[];
+}
+
 export type ExtensionMessage =
   | TabContentExtensionMessage
   | TabsExtensionMessage
@@ -207,7 +226,9 @@ export type ExtensionMessage =
   | InterceptedMediaResourcesExtensionMessage
   | BlobDataExtensionMessage
   | FetchedUrlDataExtensionMessage
-  | SnapshotResultExtensionMessage;
+  | SnapshotResultExtensionMessage
+  | TabLoadedExtensionMessage
+  | ElementFoundExtensionMessage;
 
 export interface ExtensionError {
   correlationId: string;

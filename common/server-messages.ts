@@ -152,6 +152,18 @@ export interface TakeSnapshotServerMessage extends ServerMessageBase {
   scroll?: boolean;
 }
 
+export interface IsTabLoadedServerMessage extends ServerMessageBase {
+  cmd: "is-tab-loaded";
+  tabId: number;
+}
+
+export interface FindElementServerMessage extends ServerMessageBase {
+  cmd: "find-element";
+  tabId: number;
+  query: string;
+  mode: "css" | "xpath" | "text" | "regexp";
+}
+
 export type ServerMessage =
   | OpenTabServerMessage
   | CloseTabsServerMessage
@@ -173,6 +185,8 @@ export type ServerMessage =
   | GetInterceptedMediaResourcesServerMessage
   | FetchBlobUrlServerMessage
   | FetchUrlServerMessage
-  | TakeSnapshotServerMessage;
+  | TakeSnapshotServerMessage
+  | IsTabLoadedServerMessage
+  | FindElementServerMessage;
 
 export type ServerMessageRequest = ServerMessage & { correlationId: string };

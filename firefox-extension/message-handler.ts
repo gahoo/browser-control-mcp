@@ -116,6 +116,12 @@ export class MessageHandler {
       case "take-snapshot":
         await this.takeSnapshot(req.correlationId, req.tabId, req.selector, req.method, req.scroll);
         break;
+      case "is-tab-loaded":
+        await this.isTabLoaded(req.correlationId, req.tabId);
+        break;
+      case "find-element":
+        await this.findElement(req.correlationId, req.tabId, req.query, req.mode);
+        break;
       default:
         const _exhaustiveCheck: never = req;
         console.error("[MessageHandler] Invalid message received:", req);
@@ -796,6 +802,155 @@ export class MessageHandler {
 
       },
       isTruncated,
+    });
+  }
+
+  private async isTabLoaded(
+    correlationId: string,
+    tabId: number
+  ): Promise<void> {
+    let isLoaded = false;
+    try {
+      const tab = await browser.tabs.get(tabId);
+      isLoaded = tab.status === "complete";
+    } catch (e) {
+      // Tab might not exist
+      isLoaded = false;
+    }
+
+    await this.client.sendResourceToServer({
+      resource: "tab-loaded",
+      correlationId,
+      isLoaded,
+    });
+  }
+
+  private async findElement(
+    correlationId: string,
+    tabId: number,
+    query: string,
+    mode: "css" | "xpath" | "text" | "regexp"
+  ): Promise<void> {
+    const tab = await browser.tabs.get(tabId);
+    if (tab.url && (await isDomainInDenyList(tab.url))) {
+      throw new Error(`Domain in tab URL is in the deny list`);
+    }
+
+    await this.checkForUrlPermission(tab.url);
+
+    const results = await browser.tabs.executeScript(tabId, {
+      code: `
+      (function() {
+        const query = ${JSON.stringify(query)};
+        const mode = ${JSON.stringify(mode)};
+        
+        function getUniqueSelector(el) {
+          if (el.id) return '#' + CSS.escape(el.id);
+          let path = [];
+          while (el && el.nodeType === Node.ELEMENT_NODE) {
+            let selector = el.nodeName.toLowerCase();
+            if (el.id) {
+              selector = '#' + CSS.escape(el.id);
+              path.unshift(selector);
+              break;
+            } else {
+              let sib = el, nth = 1;
+              while (sib = sib.previousElementSibling) {
+                if (sib.nodeName.toLowerCase() === selector) nth++;
+              }
+              if (nth !== 1) selector += ':nth-of-type(' + nth + ')';
+            }
+            path.unshift(selector);
+            el = el.parentNode;
+          }
+          return path.join(' > ');
+        }
+        
+        function getXPath(el) {
+          if (el.id) return '//*[@id="' + el.id + '"]';
+          let path = [];
+          while (el && el.nodeType === Node.ELEMENT_NODE) {
+            let idx = 0;
+            let sibling = el.previousSibling;
+            while (sibling) {
+              if (sibling.nodeType === Node.ELEMENT_NODE && sibling.nodeName === el.nodeName) idx++;
+              sibling = sibling.previousSibling;
+            }
+            let tagName = el.nodeName.toLowerCase();
+            let pathIndex = idx ? '[' + (idx + 1) + ']' : '';
+            path.unshift(tagName + pathIndex);
+            el = el.parentNode;
+          }
+          return '/' + path.join('/');
+        }
+
+        function isVisible(el) {
+            return !!( el.offsetWidth || el.offsetHeight || el.getClientRects().length );
+        }
+
+        let elements = [];
+
+        try {
+          if (mode === 'css') {
+            elements = Array.from(document.querySelectorAll(query));
+          } else if (mode === 'xpath') {
+            const result = document.evaluate(query, document, null, XPathResult.ORDERED_NODE_SNAPSHOT_TYPE, null);
+            for (let i = 0; i < result.snapshotLength; i++) {
+              elements.push(result.snapshotItem(i));
+            }
+          } else if (mode === 'text') {
+            const lowerQuery = query.toLowerCase();
+            const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_ELEMENT, null, false);
+            let node;
+            while (node = walker.nextNode()) {
+               // simple check: if element has direct text content matching query
+               // or we can check node.textContent
+               if (node.textContent && node.textContent.toLowerCase().includes(lowerQuery)) {
+                 // Optimization: only add leaf nodes or nodes where text is directly inside?
+                 // For simplicity, we add all nodes matching text. But this might be too many.
+                 // Let's filter to leaf-ish nodes or just all? User asked for "find element".
+                 // Let's stick to elements that *contain* the text.
+                 // To avoid duplicates (parent contains text if child contains text), maybe we shouldn't worry too much but
+                 // often users want the specific button/link.
+                 elements.push(node);
+               }
+            }
+             // Deduplicate: remove parents if children are also in list? 
+             // Maybe simpler: just return all.
+          } else if (mode === 'regexp') {
+             const regex = new RegExp(query, 'i'); // Case insensitive default? or let user specify flag?
+             // Implementation plan said "regex".
+             const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_ELEMENT, null, false);
+             let node;
+             while (node = walker.nextNode()) {
+               if (regex.test(node.textContent || '')) {
+                 elements.push(node);
+               }
+             }
+          }
+        } catch (e) {
+          // ignore invalid selectors/regex
+        }
+
+        // Limit results to avoid massive payloads
+        const limitedElements = elements.slice(0, 100);
+
+        return limitedElements.map((el, index) => ({
+          index,
+          tagName: el.tagName.toLowerCase(),
+          text: (el.textContent || '').trim().substring(0, 100),
+          selector: getUniqueSelector(el),
+          xpath: getXPath(el),
+          isVisible: isVisible(el)
+        }));
+      })();
+      `
+    });
+
+    await this.client.sendResourceToServer({
+      resource: "element-found",
+      correlationId,
+      elements: results[0] || []
     });
   }
 

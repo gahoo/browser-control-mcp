@@ -109,6 +109,16 @@ export const AVAILABLE_TOOLS: ToolInfo[] = [
     id: "take-snapshot",
     name: "Take Snapshot",
     description: "Allows the MCP server to take screenshots of web pages or elements"
+  },
+  {
+    id: "is-tab-loaded",
+    name: "Check Tab Loaded",
+    description: "Allows the MCP server to check if a tab is fully loaded"
+  },
+  {
+    id: "find-element",
+    name: "Find Element",
+    description: "Allows the MCP server to find elements on a page using CSS, XPath, or text"
   }
 ];
 
@@ -134,6 +144,8 @@ export const COMMAND_TO_TOOL_ID: Record<ServerMessageRequest["cmd"], string> = {
   "fetch-blob-url": "fetch-blob-url",
   "fetch-url": "fetch-url",
   "take-snapshot": "take-snapshot",
+  "is-tab-loaded": "is-tab-loaded",
+  "find-element": "find-element",
 };
 
 // Storage schema for tool settings
