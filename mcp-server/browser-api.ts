@@ -17,8 +17,9 @@ import type {
   FetchedUrlDataExtensionMessage,
   SnapshotResultExtensionMessage,
   TabLoadedExtensionMessage,
-  ElementFoundExtensionMessage,
   FoundElement,
+  TextTypedExtensionMessage,
+  KeyPressedExtensionMessage,
 } from "@browser-control-mcp/common";
 import { isPortInUse } from "./util";
 import { logger } from "./logger";
@@ -482,6 +483,38 @@ export class BrowserAPI {
     });
     const message = await this.waitForResponse(correlationId, "element-found");
     return message.elements;
+  }
+
+  async typeText(
+    tabId: number,
+    text: string,
+    options?: { selector?: string; xpath?: string; index?: number }
+  ): Promise<void> {
+    const correlationId = this.sendMessageToExtension({
+      cmd: "type-text",
+      tabId,
+      text,
+      selector: options?.selector,
+      xpath: options?.xpath,
+      index: options?.index,
+    });
+    await this.waitForResponse(correlationId, "text-typed");
+  }
+
+  async pressKey(
+    tabId: number,
+    key: string,
+    options?: { selector?: string; xpath?: string; index?: number }
+  ): Promise<void> {
+    const correlationId = this.sendMessageToExtension({
+      cmd: "press-key",
+      tabId,
+      key,
+      selector: options?.selector,
+      xpath: options?.xpath,
+      index: options?.index,
+    });
+    await this.waitForResponse(correlationId, "key-pressed");
   }
 
   private createSignature(payload: string): string {

@@ -206,6 +206,18 @@ export interface ElementFoundExtensionMessage extends ExtensionMessageBase {
   elements: FoundElement[];
 }
 
+export interface TextTypedExtensionMessage extends ExtensionMessageBase {
+  resource: "text-typed";
+  success: boolean;
+  error?: string;
+}
+
+export interface KeyPressedExtensionMessage extends ExtensionMessageBase {
+  resource: "key-pressed";
+  success: boolean;
+  error?: string;
+}
+
 export type ExtensionMessage =
   | TabContentExtensionMessage
   | TabsExtensionMessage
@@ -228,7 +240,9 @@ export type ExtensionMessage =
   | FetchedUrlDataExtensionMessage
   | SnapshotResultExtensionMessage
   | TabLoadedExtensionMessage
-  | ElementFoundExtensionMessage;
+  | ElementFoundExtensionMessage
+  | TextTypedExtensionMessage
+  | KeyPressedExtensionMessage;
 
 export interface ExtensionError {
   correlationId: string;

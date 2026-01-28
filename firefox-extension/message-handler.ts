@@ -122,6 +122,12 @@ export class MessageHandler {
       case "find-element":
         await this.findElement(req.correlationId, req.tabId, req.query, req.mode);
         break;
+      case "type-text":
+        await this.typeText(req.correlationId, req.tabId, req.text, req.selector, req.xpath, req.index);
+        break;
+      case "press-key":
+        await this.pressKey(req.correlationId, req.tabId, req.key, req.selector, req.xpath, req.index);
+        break;
       default:
         const _exhaustiveCheck: never = req;
         console.error("[MessageHandler] Invalid message received:", req);
@@ -952,6 +958,180 @@ export class MessageHandler {
       correlationId,
       elements: results[0] || []
     });
+  }
+
+  private async typeText(
+    correlationId: string,
+    tabId: number,
+    text: string,
+    selector?: string,
+    xpath?: string,
+    index?: number
+  ): Promise<void> {
+    const tab = await browser.tabs.get(tabId);
+    if (tab.url && (await isDomainInDenyList(tab.url))) {
+      throw new Error(`Domain in tab URL is in the deny list`);
+    }
+
+    await this.checkForUrlPermission(tab.url);
+
+    const results = await browser.tabs.executeScript(tabId, {
+      code: `
+      (function() {
+        const text = ${JSON.stringify(text)};
+        const selector = ${JSON.stringify(selector || null)};
+        const xpath = ${JSON.stringify(xpath || null)};
+        const targetIndex = ${JSON.stringify(index ?? null)};
+        
+        let elements = [];
+        
+        if (xpath) {
+          const result = document.evaluate(xpath, document, null, XPathResult.ORDERED_NODE_SNAPSHOT_TYPE, null);
+          for (let i = 0; i < result.snapshotLength; i++) {
+            elements.push(result.snapshotItem(i));
+          }
+        } else if (selector) {
+          elements = Array.from(document.querySelectorAll(selector));
+        }
+        
+        if (elements.length === 0) {
+          return { success: false, error: 'No matching elements found' };
+        }
+        
+        const targetEl = targetIndex !== null ? elements[targetIndex] : elements[0];
+        if (!targetEl) {
+          return { success: false, error: 'Element at index ' + targetIndex + ' not found. Found ' + elements.length + ' elements.' };
+        }
+        
+        targetEl.focus();
+        
+        if (targetEl.tagName === 'INPUT' || targetEl.tagName === 'TEXTAREA') {
+          targetEl.value = text;
+        } else if (targetEl.isContentEditable) {
+          targetEl.textContent = text;
+        } else {
+          return { success: false, error: 'Element is not an input, textarea or contenteditable' };
+        }
+        
+        targetEl.dispatchEvent(new Event('input', { bubbles: true }));
+        targetEl.dispatchEvent(new Event('change', { bubbles: true }));
+        
+        return { success: true };
+      })();
+      `
+    });
+
+    const result = results[0];
+    if (result.success) {
+      await this.client.sendResourceToServer({
+        resource: "text-typed",
+        correlationId,
+        success: true,
+      });
+    } else {
+      await this.client.sendResourceToServer({
+        resource: "text-typed",
+        correlationId,
+        success: false,
+        error: result.error,
+      });
+    }
+  }
+
+  private async pressKey(
+    correlationId: string,
+    tabId: number,
+    key: string,
+    selector?: string,
+    xpath?: string,
+    index?: number
+  ): Promise<void> {
+    const tab = await browser.tabs.get(tabId);
+    if (tab.url && (await isDomainInDenyList(tab.url))) {
+      throw new Error(`Domain in tab URL is in the deny list`);
+    }
+
+    await this.checkForUrlPermission(tab.url);
+
+    const results = await browser.tabs.executeScript(tabId, {
+      code: `
+      (function() {
+        const key = ${JSON.stringify(key)};
+        const selector = ${JSON.stringify(selector || null)};
+        const xpath = ${JSON.stringify(xpath || null)};
+        const targetIndex = ${JSON.stringify(index ?? null)};
+        
+        // Map common keys to their numeric codes
+        const keyCodes = {
+          'Enter': 13,
+          'Tab': 9,
+          'Escape': 27,
+          'Backspace': 8,
+          'Space': 32,
+          'ArrowUp': 38,
+          'ArrowDown': 40,
+          'ArrowLeft': 37,
+          'ArrowRight': 39
+        };
+        
+        let elements = [];
+        
+        if (xpath) {
+          const result = document.evaluate(xpath, document, null, XPathResult.ORDERED_NODE_SNAPSHOT_TYPE, null);
+          for (let i = 0; i < result.snapshotLength; i++) {
+            elements.push(result.snapshotItem(i));
+          }
+        } else if (selector) {
+          elements = Array.from(document.querySelectorAll(selector));
+        }
+        
+        if (elements.length === 0) {
+          elements = [document.activeElement || document.body];
+        }
+        
+        const targetEl = targetIndex !== null ? elements[targetIndex] : elements[0];
+        if (!targetEl) {
+          return { success: false, error: 'Element at index ' + targetIndex + ' not found' };
+        }
+        
+        targetEl.focus();
+        
+        const matchingCode = keyCodes[key] || 0;
+        const eventOptions = {
+          key: key,
+          code: key === 'Enter' ? 'Enter' : (key === 'Tab' ? 'Tab' : (key === 'Escape' ? 'Escape' : '')),
+          keyCode: matchingCode,
+          which: matchingCode,
+          bubbles: true,
+          cancelable: true
+        };
+        
+        targetEl.dispatchEvent(new KeyboardEvent('keydown', eventOptions));
+        if (matchingCode !== 0 || key.length === 1) {
+           targetEl.dispatchEvent(new KeyboardEvent('keypress', eventOptions));
+        }
+        targetEl.dispatchEvent(new KeyboardEvent('keyup', eventOptions));
+        
+        return { success: true };
+      })();
+      `
+    });
+
+    const result = results[0];
+    if (result.success) {
+      await this.client.sendResourceToServer({
+        resource: "key-pressed",
+        correlationId,
+        success: true,
+      });
+    } else {
+      await this.client.sendResourceToServer({
+        resource: "key-pressed",
+        correlationId,
+        success: false,
+        error: result.error,
+      });
+    }
   }
 
   private async captureTab(windowId: number): Promise<string> {

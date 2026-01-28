@@ -119,6 +119,16 @@ export const AVAILABLE_TOOLS: ToolInfo[] = [
     id: "find-element",
     name: "Find Element",
     description: "Allows the MCP server to find elements on a page using CSS, XPath, or text"
+  },
+  {
+    id: "type-text",
+    name: "Type Text",
+    description: "Allows the MCP server to input text into form fields"
+  },
+  {
+    id: "press-key",
+    name: "Press Key",
+    description: "Allows the MCP server to simulate keyboard events (e.g., Enter, Tab)"
   }
 ];
 
@@ -146,6 +156,8 @@ export const COMMAND_TO_TOOL_ID: Record<ServerMessageRequest["cmd"], string> = {
   "take-snapshot": "take-snapshot",
   "is-tab-loaded": "is-tab-loaded",
   "find-element": "find-element",
+  "type-text": "type-text",
+  "press-key": "press-key",
 };
 
 // Storage schema for tool settings

@@ -872,6 +872,42 @@ mcpServer.tool(
   }
 );
 
+mcpServer.tool(
+  "type-text",
+  "Input text into a form field or editable element. Supports matching by CSS selector, XPath, or index from find-element.",
+  {
+    tabId: z.number().describe("Tab ID to type in"),
+    text: z.string().describe("Text to type"),
+    selector: z.string().optional().describe("CSS selector of the target element"),
+    xpath: z.string().optional().describe("XPath of the target element"),
+    index: z.number().optional().describe("Index of the element (0-based)"),
+  },
+  async ({ tabId, text, selector, xpath, index }) => {
+    await browserApi.typeText(tabId, text, { selector, xpath, index });
+    return {
+      content: [{ type: "text", text: `Typed text into element` }],
+    };
+  }
+);
+
+mcpServer.tool(
+  "press-key",
+  "Simulate a single key press (e.g., 'Enter', 'Tab', 'Escape') on a specific element. Use this for submitting forms or triggering keyboard shortcuts.",
+  {
+    tabId: z.number().describe("Tab ID to press key in"),
+    key: z.string().describe("Key name (e.g., 'Enter', 'Tab', 'Escape', 'ArrowDown')"),
+    selector: z.string().optional().describe("CSS selector of the target element"),
+    xpath: z.string().optional().describe("XPath of the target element"),
+    index: z.number().optional().describe("Index of the element (0-based)"),
+  },
+  async ({ tabId, key, selector, xpath, index }) => {
+    await browserApi.pressKey(tabId, key, { selector, xpath, index });
+    return {
+      content: [{ type: "text", text: `Pressed key: ${key}` }],
+    };
+  }
+);
+
 
 const browserApi = new BrowserAPI();
 

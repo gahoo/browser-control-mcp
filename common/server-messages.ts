@@ -164,6 +164,24 @@ export interface FindElementServerMessage extends ServerMessageBase {
   mode: "css" | "xpath" | "text" | "regexp";
 }
 
+export interface TypeTextServerMessage extends ServerMessageBase {
+  cmd: "type-text";
+  tabId: number;
+  text: string;
+  selector?: string;
+  xpath?: string;
+  index?: number;
+}
+
+export interface PressKeyServerMessage extends ServerMessageBase {
+  cmd: "press-key";
+  tabId: number;
+  key: string;
+  selector?: string;
+  xpath?: string;
+  index?: number;
+}
+
 export type ServerMessage =
   | OpenTabServerMessage
   | CloseTabsServerMessage
@@ -187,6 +205,8 @@ export type ServerMessage =
   | FetchUrlServerMessage
   | TakeSnapshotServerMessage
   | IsTabLoadedServerMessage
-  | FindElementServerMessage;
+  | FindElementServerMessage
+  | TypeTextServerMessage
+  | PressKeyServerMessage;
 
 export type ServerMessageRequest = ServerMessage & { correlationId: string };
