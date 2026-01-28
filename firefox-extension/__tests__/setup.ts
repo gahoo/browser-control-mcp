@@ -11,6 +11,7 @@ const mockBrowser = {
     move: jest.fn(),
     update: jest.fn(),
     group: jest.fn(),
+    sendMessage: jest.fn(),
   },
   tabGroups: {
     update: jest.fn(),
@@ -24,8 +25,8 @@ const mockBrowser = {
   },
   storage: {
     local: {
-        get: jest.fn(),
-        set: jest.fn(),
+      get: jest.fn(),
+      set: jest.fn(),
     },
   },
   permissions: {

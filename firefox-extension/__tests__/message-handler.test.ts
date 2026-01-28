@@ -351,16 +351,14 @@ describe("MessageHandler", () => {
         (browser.tabs.get as jest.Mock).mockResolvedValue(mockTab);
         (browser.permissions.contains as jest.Mock).mockResolvedValue(true);
 
-        const mockScriptResult = [
-          {
-            links: [{ url: "https://example.com/page", text: "Page" }],
-            fullText: "Page content",
-            isTruncated: false,
-            totalLength: 12,
-          },
-        ];
-        (browser.tabs.executeScript as jest.Mock).mockResolvedValue(
-          mockScriptResult
+        const mockResponse = {
+          links: [{ url: "https://example.com/page", text: "Page" }],
+          fullText: "Page content",
+          isTruncated: false,
+          totalLength: 12,
+        };
+        (browser.tabs.sendMessage as jest.Mock).mockResolvedValue(
+          mockResponse
         );
 
         // Act
@@ -371,7 +369,10 @@ describe("MessageHandler", () => {
         expect(browser.permissions.contains).toHaveBeenCalledWith({
           origins: ["https://example.com/*"],
         });
-        expect(browser.tabs.executeScript).toHaveBeenCalled();
+        expect(browser.tabs.sendMessage).toHaveBeenCalledWith(123, {
+          action: "getTabContent",
+          offset: 0
+        });
         expect(mockClient.sendResourceToServer).toHaveBeenCalledWith({
           resource: "tab-content",
           tabId: 123,
@@ -417,7 +418,7 @@ describe("MessageHandler", () => {
         await expect(
           messageHandler.handleDecodedMessage(request)
         ).rejects.toThrow("Domain in tab URL is in the deny list");
-        expect(browser.tabs.executeScript).not.toHaveBeenCalled();
+        expect(browser.tabs.sendMessage).not.toHaveBeenCalled();
       });
 
       it("should throw an error if permissions are denied", async () => {
@@ -436,7 +437,7 @@ describe("MessageHandler", () => {
         await expect(
           messageHandler.handleDecodedMessage(request)
         ).rejects.toThrow();
-        expect(browser.tabs.executeScript).not.toHaveBeenCalled();
+        expect(browser.tabs.sendMessage).not.toHaveBeenCalled();
       });
     });
 

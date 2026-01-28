@@ -288,41 +288,28 @@ export class MessageHandler {
     await this.checkForUrlPermission(tab.url);
 
     const MAX_CONTENT_LENGTH = 50_000;
+    /*
     const results = await browser.tabs.executeScript(tabId, {
-      code: `
-      (function () {
-        function getLinks() {
-          const linkElements = document.querySelectorAll('a[href]');
-          return Array.from(linkElements).map(el => ({
-            url: el.href,
-            text: el.innerText.trim() || el.getAttribute('aria-label') || el.getAttribute('title') || ''
-          })).filter(link => link.text !== '' && link.url.startsWith('https://') && !link.url.includes('#'));
-        }
-
-        function getTextContent() {
-          let isTruncated = false;
-          let text = document.body.innerText.substring(${Number(offset) || 0});
-          if (text.length > ${MAX_CONTENT_LENGTH}) {
-            text = text.substring(0, ${MAX_CONTENT_LENGTH});
-            isTruncated = true;
-          }
-          return {
-            text, isTruncated
-          }
-        }
-
-        const textContent = getTextContent();
-
-        return {
-          links: getLinks(),
-          fullText: textContent.text,
-          isTruncated: textContent.isTruncated,
-          totalLength: document.body.innerText.length
-        };
-      })();
-    `,
+      code: `...`
     });
-    const { isTruncated, fullText, links, totalLength } = results[0];
+    */
+    let response: any;
+    try {
+      response = await browser.tabs.sendMessage(tabId, {
+        action: "getTabContent",
+        offset: Number(offset) || 0
+      });
+    } catch (error: any) {
+      if (error.message.includes("Could not establish connection") || error.message.includes("receiving end does not exist")) {
+        throw new Error("Tab connection lost or content script not loaded. Please refresh the tab.");
+      }
+      throw error;
+    }
+
+    if (response.error) {
+      throw new Error(response.error);
+    }
+    const { isTruncated, fullText, links, totalLength } = response;
     await this.client.sendResourceToServer({
       resource: "tab-content",
       tabId,
@@ -494,75 +481,28 @@ export class MessageHandler {
 
     await this.checkForUrlPermission(tab.url);
 
-    const results = await browser.tabs.executeScript(tabId, {
-      code: `
-      (function() {
-        const selectorFilter = ${JSON.stringify(selector || null)};
-        
-        function getUniqueSelector(el) {
-          if (el.id) return '#' + CSS.escape(el.id);
-          
-          let path = [];
-          while (el && el.nodeType === Node.ELEMENT_NODE) {
-            let selector = el.nodeName.toLowerCase();
-            if (el.id) {
-              selector = '#' + CSS.escape(el.id);
-              path.unshift(selector);
-              break;
-            } else {
-              let sib = el, nth = 1;
-              while (sib = sib.previousElementSibling) {
-                if (sib.nodeName.toLowerCase() === selector) nth++;
-              }
-              if (nth !== 1) selector += ':nth-of-type(' + nth + ')';
-            }
-            path.unshift(selector);
-            el = el.parentNode;
-          }
-          return path.join(' > ');
-        }
-        
-        function getXPath(el) {
-          if (el.id) return '//*[@id="' + el.id + '"]';
-          
-          let path = [];
-          while (el && el.nodeType === Node.ELEMENT_NODE) {
-            let idx = 0;
-            let sibling = el.previousSibling;
-            while (sibling) {
-              if (sibling.nodeType === Node.ELEMENT_NODE && sibling.nodeName === el.nodeName) idx++;
-              sibling = sibling.previousSibling;
-            }
-            let tagName = el.nodeName.toLowerCase();
-            let pathIndex = idx ? '[' + (idx + 1) + ']' : '';
-            path.unshift(tagName + pathIndex);
-            el = el.parentNode;
-          }
-          return '/' + path.join('/');
-        }
-        
-        const clickableSelectors = 'a[href], button, input[type="button"], input[type="submit"], [role="button"], [onclick]';
-        const baseSelector = selectorFilter ? selectorFilter + ', ' + selectorFilter + ' ' + clickableSelectors : clickableSelectors;
-        const elements = document.querySelectorAll(selectorFilter || clickableSelectors);
-        
-        return Array.from(elements).map((el, index) => ({
-          index,
-          tagName: el.tagName.toLowerCase(),
-          textContent: (el.textContent || '').trim().substring(0, 100),
-          href: el.href || undefined,
-          type: el.type || undefined,
-          selector: getUniqueSelector(el),
-          xpath: getXPath(el)
-        })).filter(el => el.textContent || el.href);
-      })();
-      `,
-    });
+    let results: any;
+    try {
+      results = await browser.tabs.sendMessage(tabId, {
+        action: "getClickableElements",
+        selector: selector
+      });
+    } catch (error: any) {
+      if (error.message.includes("Could not establish connection") || error.message.includes("receiving end does not exist")) {
+        throw new Error("Tab connection lost or content script not loaded. Please refresh the tab.");
+      }
+      throw error;
+    }
+
+    if (results && results.error) {
+      throw new Error(results.error);
+    }
 
     await this.client.sendResourceToServer({
       resource: "clickable-elements",
       correlationId,
       tabId,
-      elements: results[0] || [],
+      elements: results || [],
     });
   }
 
@@ -581,99 +521,18 @@ export class MessageHandler {
 
     await this.checkForUrlPermission(tab.url);
 
-    const results = await browser.tabs.executeScript(tabId, {
-      code: `
-      (function() {
-        const textContent = ${JSON.stringify(textContent || null)};
-        const selector = ${JSON.stringify(selector || null)};
-        const xpath = ${JSON.stringify(xpath || null)};
-        const targetIndex = ${JSON.stringify(index ?? null)};
-        
-        function getUniqueSelector(el) {
-          if (el.id) return '#' + CSS.escape(el.id);
-          let path = [];
-          while (el && el.nodeType === Node.ELEMENT_NODE) {
-            let selector = el.nodeName.toLowerCase();
-            if (el.id) {
-              selector = '#' + CSS.escape(el.id);
-              path.unshift(selector);
-              break;
-            } else {
-              let sib = el, nth = 1;
-              while (sib = sib.previousElementSibling) {
-                if (sib.nodeName.toLowerCase() === selector) nth++;
-              }
-              if (nth !== 1) selector += ':nth-of-type(' + nth + ')';
-            }
-            path.unshift(selector);
-            el = el.parentNode;
-          }
-          return path.join(' > ');
-        }
-        
-        function getXPath(el) {
-          if (el.id) return '//*[@id="' + el.id + '"]';
-          let path = [];
-          while (el && el.nodeType === Node.ELEMENT_NODE) {
-            let idx = 0;
-            let sibling = el.previousSibling;
-            while (sibling) {
-              if (sibling.nodeType === Node.ELEMENT_NODE && sibling.nodeName === el.nodeName) idx++;
-              sibling = sibling.previousSibling;
-            }
-            let tagName = el.nodeName.toLowerCase();
-            let pathIndex = idx ? '[' + (idx + 1) + ']' : '';
-            path.unshift(tagName + pathIndex);
-            el = el.parentNode;
-          }
-          return '/' + path.join('/');
-        }
-        
-        let elements = [];
-        
-        if (xpath) {
-          const result = document.evaluate(xpath, document, null, XPathResult.ORDERED_NODE_SNAPSHOT_TYPE, null);
-          for (let i = 0; i < result.snapshotLength; i++) {
-            elements.push(result.snapshotItem(i));
-          }
-        } else if (selector) {
-          elements = Array.from(document.querySelectorAll(selector));
-        } else if (textContent) {
-          const clickableSelectors = 'a[href], button, input[type="button"], input[type="submit"], [role="button"], [onclick]';
-          const allClickable = document.querySelectorAll(clickableSelectors);
-          elements = Array.from(allClickable).filter(el => 
-            (el.textContent || '').toLowerCase().includes(textContent.toLowerCase())
-          );
-        }
-        
-        if (elements.length === 0) {
-          return { success: false, error: 'No matching elements found' };
-        }
-        
-        const targetEl = targetIndex !== null ? elements[targetIndex] : elements[0];
-        if (!targetEl) {
-          return { success: false, error: 'Element at index ' + targetIndex + ' not found. Found ' + elements.length + ' elements.' };
-        }
-        
-        targetEl.click();
-        
-        return {
-          success: true,
-          clickedElement: {
-            index: targetIndex !== null ? targetIndex : 0,
-            tagName: targetEl.tagName.toLowerCase(),
-            textContent: (targetEl.textContent || '').trim().substring(0, 100),
-            href: targetEl.href || undefined,
-            type: targetEl.type || undefined,
-            selector: getUniqueSelector(targetEl),
-            xpath: getXPath(targetEl)
-          }
-        };
-      })();
-      `,
-    });
-
-    const result = results[0];
+    let result: any;
+    try {
+      result = await browser.tabs.sendMessage(tabId, {
+        action: "clickElement",
+        textContent, selector, xpath, index
+      });
+    } catch (error: any) {
+      if (error.message.includes("Could not establish connection") || error.message.includes("receiving end does not exist")) {
+        throw new Error("Tab connection lost or content script not loaded. Please refresh the tab.");
+      }
+      throw error;
+    }
     await this.client.sendResourceToServer({
       resource: "click-result",
       correlationId,
@@ -761,21 +620,25 @@ export class MessageHandler {
 
     // Clear any previous result and set extraction options
     const extractionOptions = options?.cssSelector ? { cssSelector: options.cssSelector } : undefined;
-    await browser.tabs.executeScript(tabId, {
-      code: `window.__extractionResult = undefined; window.__extractionOptions = ${JSON.stringify(extractionOptions)};`
-    });
-    await browser.tabs.executeScript(tabId, { file: "dist/extractor.js" });
 
-    // Retrieve the result from the global variable
-    const results = await browser.tabs.executeScript(tabId, {
-      code: "window.__extractionResult",
-    });
-
-    if (!results || results.length === 0) {
-      throw new Error(`Content extraction failed: executeScript returned no results.`);
+    let result: any;
+    try {
+      result = await browser.tabs.sendMessage(tabId, {
+        action: "getMarkdownContent",
+        options: extractionOptions
+      });
+    } catch (error: any) {
+      if (error.message.includes("Could not establish connection") || error.message.includes("receiving end does not exist")) {
+        throw new Error("Tab connection lost or content script not loaded. Please refresh the tab.");
+      }
+      throw error;
     }
 
-    const result = results[0];
+    if (!result) {
+      throw new Error(`Content extraction failed: Content script returned no results.`);
+    }
+
+
     if (!result) {
       throw new Error(`Content extraction failed: The extraction script did not set a result.`);
     }
@@ -844,119 +707,24 @@ export class MessageHandler {
 
     await this.checkForUrlPermission(tab.url);
 
-    const results = await browser.tabs.executeScript(tabId, {
-      code: `
-      (function() {
-        const query = ${JSON.stringify(query)};
-        const mode = ${JSON.stringify(mode)};
-        
-        function getUniqueSelector(el) {
-          if (el.id) return '#' + CSS.escape(el.id);
-          let path = [];
-          while (el && el.nodeType === Node.ELEMENT_NODE) {
-            let selector = el.nodeName.toLowerCase();
-            if (el.id) {
-              selector = '#' + CSS.escape(el.id);
-              path.unshift(selector);
-              break;
-            } else {
-              let sib = el, nth = 1;
-              while (sib = sib.previousElementSibling) {
-                if (sib.nodeName.toLowerCase() === selector) nth++;
-              }
-              if (nth !== 1) selector += ':nth-of-type(' + nth + ')';
-            }
-            path.unshift(selector);
-            el = el.parentNode;
-          }
-          return path.join(' > ');
-        }
-        
-        function getXPath(el) {
-          if (el.id) return '//*[@id="' + el.id + '"]';
-          let path = [];
-          while (el && el.nodeType === Node.ELEMENT_NODE) {
-            let idx = 0;
-            let sibling = el.previousSibling;
-            while (sibling) {
-              if (sibling.nodeType === Node.ELEMENT_NODE && sibling.nodeName === el.nodeName) idx++;
-              sibling = sibling.previousSibling;
-            }
-            let tagName = el.nodeName.toLowerCase();
-            let pathIndex = idx ? '[' + (idx + 1) + ']' : '';
-            path.unshift(tagName + pathIndex);
-            el = el.parentNode;
-          }
-          return '/' + path.join('/');
-        }
-
-        function isVisible(el) {
-            return !!( el.offsetWidth || el.offsetHeight || el.getClientRects().length );
-        }
-
-        let elements = [];
-
-        try {
-          if (mode === 'css') {
-            elements = Array.from(document.querySelectorAll(query));
-          } else if (mode === 'xpath') {
-            const result = document.evaluate(query, document, null, XPathResult.ORDERED_NODE_SNAPSHOT_TYPE, null);
-            for (let i = 0; i < result.snapshotLength; i++) {
-              elements.push(result.snapshotItem(i));
-            }
-          } else if (mode === 'text') {
-            const lowerQuery = query.toLowerCase();
-            const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_ELEMENT, null, false);
-            let node;
-            while (node = walker.nextNode()) {
-               // simple check: if element has direct text content matching query
-               // or we can check node.textContent
-               if (node.textContent && node.textContent.toLowerCase().includes(lowerQuery)) {
-                 // Optimization: only add leaf nodes or nodes where text is directly inside?
-                 // For simplicity, we add all nodes matching text. But this might be too many.
-                 // Let's filter to leaf-ish nodes or just all? User asked for "find element".
-                 // Let's stick to elements that *contain* the text.
-                 // To avoid duplicates (parent contains text if child contains text), maybe we shouldn't worry too much but
-                 // often users want the specific button/link.
-                 elements.push(node);
-               }
-            }
-             // Deduplicate: remove parents if children are also in list? 
-             // Maybe simpler: just return all.
-          } else if (mode === 'regexp') {
-             const regex = new RegExp(query, 'i'); // Case insensitive default? or let user specify flag?
-             // Implementation plan said "regex".
-             const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_ELEMENT, null, false);
-             let node;
-             while (node = walker.nextNode()) {
-               if (regex.test(node.textContent || '')) {
-                 elements.push(node);
-               }
-             }
-          }
-        } catch (e) {
-          // ignore invalid selectors/regex
-        }
-
-        // Limit results to avoid massive payloads
-        const limitedElements = elements.slice(0, 100);
-
-        return limitedElements.map((el, index) => ({
-          index,
-          tagName: el.tagName.toLowerCase(),
-          text: (el.textContent || '').trim().substring(0, 100),
-          selector: getUniqueSelector(el),
-          xpath: getXPath(el),
-          isVisible: isVisible(el)
-        }));
-      })();
-      `
-    });
+    let results: any;
+    try {
+      results = await browser.tabs.sendMessage(tabId, {
+        action: "findElement",
+        query,
+        mode
+      });
+    } catch (error: any) {
+      if (error.message.includes("Could not establish connection") || error.message.includes("receiving end does not exist")) {
+        throw new Error("Tab connection lost or content script not loaded. Please refresh the tab.");
+      }
+      throw error;
+    }
 
     await this.client.sendResourceToServer({
       resource: "element-found",
       correlationId,
-      elements: results[0] || []
+      elements: results || []
     });
   }
 
@@ -975,53 +743,18 @@ export class MessageHandler {
 
     await this.checkForUrlPermission(tab.url);
 
-    const results = await browser.tabs.executeScript(tabId, {
-      code: `
-      (function() {
-        const text = ${JSON.stringify(text)};
-        const selector = ${JSON.stringify(selector || null)};
-        const xpath = ${JSON.stringify(xpath || null)};
-        const targetIndex = ${JSON.stringify(index ?? null)};
-        
-        let elements = [];
-        
-        if (xpath) {
-          const result = document.evaluate(xpath, document, null, XPathResult.ORDERED_NODE_SNAPSHOT_TYPE, null);
-          for (let i = 0; i < result.snapshotLength; i++) {
-            elements.push(result.snapshotItem(i));
-          }
-        } else if (selector) {
-          elements = Array.from(document.querySelectorAll(selector));
-        }
-        
-        if (elements.length === 0) {
-          return { success: false, error: 'No matching elements found' };
-        }
-        
-        const targetEl = targetIndex !== null ? elements[targetIndex] : elements[0];
-        if (!targetEl) {
-          return { success: false, error: 'Element at index ' + targetIndex + ' not found. Found ' + elements.length + ' elements.' };
-        }
-        
-        targetEl.focus();
-        
-        if (targetEl.tagName === 'INPUT' || targetEl.tagName === 'TEXTAREA') {
-          targetEl.value = text;
-        } else if (targetEl.isContentEditable) {
-          targetEl.textContent = text;
-        } else {
-          return { success: false, error: 'Element is not an input, textarea or contenteditable' };
-        }
-        
-        targetEl.dispatchEvent(new Event('input', { bubbles: true }));
-        targetEl.dispatchEvent(new Event('change', { bubbles: true }));
-        
-        return { success: true };
-      })();
-      `
-    });
-
-    const result = results[0];
+    let result: any;
+    try {
+      result = await browser.tabs.sendMessage(tabId, {
+        action: "typeText",
+        text, selector, xpath, index
+      });
+    } catch (error: any) {
+      if (error.message.includes("Could not establish connection") || error.message.includes("receiving end does not exist")) {
+        throw new Error("Tab connection lost or content script not loaded. Please refresh the tab.");
+      }
+      throw error;
+    }
     if (result.success) {
       await this.client.sendResourceToServer({
         resource: "text-typed",
@@ -1053,71 +786,18 @@ export class MessageHandler {
 
     await this.checkForUrlPermission(tab.url);
 
-    const results = await browser.tabs.executeScript(tabId, {
-      code: `
-      (function() {
-        const key = ${JSON.stringify(key)};
-        const selector = ${JSON.stringify(selector || null)};
-        const xpath = ${JSON.stringify(xpath || null)};
-        const targetIndex = ${JSON.stringify(index ?? null)};
-        
-        // Map common keys to their numeric codes
-        const keyCodes = {
-          'Enter': 13,
-          'Tab': 9,
-          'Escape': 27,
-          'Backspace': 8,
-          'Space': 32,
-          'ArrowUp': 38,
-          'ArrowDown': 40,
-          'ArrowLeft': 37,
-          'ArrowRight': 39
-        };
-        
-        let elements = [];
-        
-        if (xpath) {
-          const result = document.evaluate(xpath, document, null, XPathResult.ORDERED_NODE_SNAPSHOT_TYPE, null);
-          for (let i = 0; i < result.snapshotLength; i++) {
-            elements.push(result.snapshotItem(i));
-          }
-        } else if (selector) {
-          elements = Array.from(document.querySelectorAll(selector));
-        }
-        
-        if (elements.length === 0) {
-          elements = [document.activeElement || document.body];
-        }
-        
-        const targetEl = targetIndex !== null ? elements[targetIndex] : elements[0];
-        if (!targetEl) {
-          return { success: false, error: 'Element at index ' + targetIndex + ' not found' };
-        }
-        
-        targetEl.focus();
-        
-        const matchingCode = keyCodes[key] || 0;
-        const eventOptions = {
-          key: key,
-          code: key === 'Enter' ? 'Enter' : (key === 'Tab' ? 'Tab' : (key === 'Escape' ? 'Escape' : '')),
-          keyCode: matchingCode,
-          which: matchingCode,
-          bubbles: true,
-          cancelable: true
-        };
-        
-        targetEl.dispatchEvent(new KeyboardEvent('keydown', eventOptions));
-        if (matchingCode !== 0 || key.length === 1) {
-           targetEl.dispatchEvent(new KeyboardEvent('keypress', eventOptions));
-        }
-        targetEl.dispatchEvent(new KeyboardEvent('keyup', eventOptions));
-        
-        return { success: true };
-      })();
-      `
-    });
-
-    const result = results[0];
+    let result: any;
+    try {
+      result = await browser.tabs.sendMessage(tabId, {
+        action: "pressKey",
+        key, selector, xpath, index
+      });
+    } catch (error: any) {
+      if (error.message.includes("Could not establish connection") || error.message.includes("receiving end does not exist")) {
+        throw new Error("Tab connection lost or content script not loaded. Please refresh the tab.");
+      }
+      throw error;
+    }
     if (result.success) {
       await this.client.sendResourceToServer({
         resource: "key-pressed",

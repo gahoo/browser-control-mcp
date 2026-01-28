@@ -14,8 +14,18 @@
     "activeTab",
     "find"
   ],
+  "content_scripts": [
+    {
+      "matches": [
+        "<all_urls>"
+      ],
+      "js": [
+        "dist/content-script.js"
+      ],
+      "run_at": "document_idle"
+    }
+  ],
   "web_accessible_resources": [
-    "dist/extractor.js",
     "dist/media-interceptor.js"
   ],
   "background": {
