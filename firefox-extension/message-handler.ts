@@ -1,4 +1,5 @@
-import type { ServerMessageRequest } from "@browser-control-mcp/common";
+
+import type { ServerMessageRequest, RunPromptResultServerMessage, ServerStatusServerMessage } from "@browser-control-mcp/common";
 import { WebsocketClient } from "./client";
 import { isCommandAllowed, isDomainInDenyList, COMMAND_TO_TOOL_ID, addAuditLogEntry, getDebugPassword, validateAndConsumeDebugPassword } from "./extension-config";
 import { convertToMarkdown } from "./utils/markdown-converter";
@@ -18,7 +19,7 @@ export class MessageHandler {
 
   public async handleDecodedMessage(req: ServerMessageRequest): Promise<void> {
     const startTime = Date.now();
-    console.log(`[MessageHandler] Received command: ${req.cmd}`, { correlationId: req.correlationId });
+    console.log(`[MessageHandler] Received command: ${req.cmd} `, { correlationId: req.correlationId });
 
     const isAllowed = await isCommandAllowed(req.cmd);
     if (!isAllowed) {
@@ -128,15 +129,55 @@ export class MessageHandler {
       case "press-key":
         await this.pressKey(req.correlationId, req.tabId, req.key, req.selector, req.xpath, req.index);
         break;
+      case "run-prompt-result":
+        this.handleRunPromptResult(req as RunPromptResultServerMessage); // Cast needed as req is ServerMessageRequest
+        break;
+      case "server-status":
+        this.handleServerStatus(req as any as ServerStatusServerMessage);
+        break;
       default:
         const _exhaustiveCheck: never = req;
         console.error("[MessageHandler] Invalid message received:", req);
     }
 
     const duration = Date.now() - startTime;
-    console.log(`[MessageHandler] Command completed: ${req.cmd}`, { correlationId: req.correlationId, durationMs: duration });
+    console.log(`[MessageHandler] Command completed: ${req.cmd} `, { correlationId: req.correlationId, durationMs: duration });
   }
 
+  private pendingRequests = new Map<string, (response: any) => void>();
+
+  public waitForResponse(correlationId: string): Promise<any> {
+    return new Promise((resolve) => {
+      this.pendingRequests.set(correlationId, resolve);
+      // Timeout cleanup?
+      setTimeout(() => {
+        if (this.pendingRequests.has(correlationId)) {
+          this.pendingRequests.delete(correlationId);
+          resolve({ error: "Timeout waiting for server response" });
+        }
+      }, 5000); // Shorter timeout for general requests
+    });
+  }
+
+  public waitForPromptResult(correlationId: string): Promise<any> {
+    return this.waitForResponse(correlationId); // Re-use generic
+  }
+
+  private handleRunPromptResult(req: RunPromptResultServerMessage) {
+    const resolver = this.pendingRequests.get(req.originalCorrelationId);
+    if (resolver) {
+      this.pendingRequests.delete(req.originalCorrelationId);
+      resolver({ content: req.content, error: req.error });
+    }
+  }
+
+  private handleServerStatus(req: ServerStatusServerMessage) {
+    const resolver = this.pendingRequests.get(req.originalCorrelationId);
+    if (resolver) {
+      this.pendingRequests.delete(req.originalCorrelationId);
+      resolver({ capabilities: req.capabilities });
+    }
+  }
   private async addAuditLogForReq(req: ServerMessageRequest) {
     // Get the URL in context (either from param or from the tab)
     let contextUrl: string | undefined;

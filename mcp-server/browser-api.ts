@@ -35,6 +35,13 @@ interface ExtensionRequestResolver<T extends ExtensionMessage["resource"]> {
   reject: (reason?: string) => void;
 }
 
+
+export interface ServerStatus {
+  capabilities: {
+    sampling: boolean;
+  };
+}
+
 export class BrowserAPI {
   private ws: WebSocket | null = null;
   private wsServer: WebSocket.Server | null = null;
@@ -553,6 +560,13 @@ export class BrowserAPI {
     const { correlationId } = decoded;
     const resolver = this.extensionRequestMap.get(correlationId);
     if (!resolver) {
+      // If we don't have a resolver, it might be an unsolicited request FROM the extension
+      // Check if it's a known request type
+      if (decoded.resource === "run-prompt-request") {
+        this.handleIncomingExtensionRequest(decoded);
+        return;
+      }
+
       logger.warn("Received response for unknown correlationId - may have timed out", { correlationId, resource: decoded.resource });
       return;
     }
@@ -564,6 +578,84 @@ export class BrowserAPI {
     logger.debug("Received response from extension", { resource, correlationId });
     this.extensionRequestMap.delete(correlationId);
     resolve(decoded);
+  }
+
+  private runPromptListener: ((prompt: string, options?: { model?: string }) => Promise<string>) | null = null;
+
+  public onRunPrompt(listener: (prompt: string, options?: { model?: string }) => Promise<string>) {
+    this.runPromptListener = listener;
+  }
+
+  private serverStatusProvider: (() => ServerStatus) | null = null;
+
+  public setServerStatusProvider(provider: () => ServerStatus) {
+    this.serverStatusProvider = provider;
+  }
+
+  private async handleIncomingExtensionRequest(decoded: ExtensionMessage) {
+    if (decoded.resource === "run-prompt-request") {
+      logger.info("Received run-prompt-request", { correlationId: decoded.correlationId });
+      let result = "Error: No prompt listener registered";
+      let isError = true;
+
+      if (this.runPromptListener) {
+        try {
+          result = await this.runPromptListener(decoded.prompt, { model: decoded.model });
+          isError = false;
+        } catch (error) {
+          result = `Error processing prompt: ${error}`;
+        }
+      }
+
+      // Send response back
+      // We use the SAME correlationId to map back to the request in the extension
+      // But our sendMessageToExtension generates a NEW correlationId.
+      // We need a raw send method or a reply method.
+      this.sendReplyToExtension({
+        cmd: "run-prompt-result",
+        originalCorrelationId: decoded.correlationId,
+        content: isError ? undefined : result,
+        error: isError ? result : undefined
+      });
+    } else if (decoded.resource === "get-server-status") {
+      logger.info("Received get-server-status request", { correlationId: decoded.correlationId });
+
+      const status = this.serverStatusProvider ? this.serverStatusProvider() : { capabilities: { sampling: false } };
+
+      this.sendReplyToExtension({
+        cmd: "server-status",
+        originalCorrelationId: decoded.correlationId,
+        ...status
+      } as any);
+    }
+  }
+
+  private async sendReplyToExtension(message: ServerMessage): Promise<void> {
+    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
+      logger.error("Cannot send reply - WebSocket not connected");
+      return;
+    }
+
+    // For replies, we don't necessarily need a new correlationId tracking, 
+    // but the protocol wrapper expects one?
+    // The Extension's MessageHandler expects a ServerMessageRequest (which has correlationId).
+    // But mostly it handles "Commands" initiated by Server.
+    // We need the Extension to handle "Responses" to its own requests.
+    // The MessageHandler in Extension currently switches on `req.cmd`.
+    // It doesn't seem to have a map for pending requests (unlike Server).
+    // So we will likely need to implement that in Extension's Client or MessageHandler later.
+    // For now, let's just send the message.
+
+    const correlationId = Math.random().toString(36).substring(2);
+    const req: ServerMessageRequest = { ...message, correlationId };
+    const payload = JSON.stringify(req);
+    const signature = this.createSignature(payload);
+    const signedMessage = {
+      payload: req,
+      signature: signature,
+    };
+
+    this.ws.send(JSON.stringify(signedMessage));
   }
 
   private handleExtensionError(decoded: ExtensionError) {

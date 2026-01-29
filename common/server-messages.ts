@@ -182,6 +182,23 @@ export interface PressKeyServerMessage extends ServerMessageBase {
   index?: number;
 }
 
+
+
+export interface RunPromptResultServerMessage extends ServerMessageBase {
+  cmd: "run-prompt-result";
+  originalCorrelationId: string;
+  content?: string;
+  error?: string;
+}
+
+export interface ServerStatusServerMessage extends ServerMessageBase {
+  cmd: "server-status";
+  capabilities: {
+    sampling: boolean;
+  };
+  originalCorrelationId: string;
+}
+
 export type ServerMessage =
   | OpenTabServerMessage
   | CloseTabsServerMessage
@@ -203,10 +220,12 @@ export type ServerMessage =
   | GetInterceptedMediaResourcesServerMessage
   | FetchBlobUrlServerMessage
   | FetchUrlServerMessage
+  | RunPromptResultServerMessage
   | TakeSnapshotServerMessage
   | IsTabLoadedServerMessage
   | FindElementServerMessage
   | TypeTextServerMessage
-  | PressKeyServerMessage;
+  | PressKeyServerMessage
+  | ServerStatusServerMessage;
 
 export type ServerMessageRequest = ServerMessage & { correlationId: string };

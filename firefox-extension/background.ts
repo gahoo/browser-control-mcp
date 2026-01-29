@@ -1,11 +1,21 @@
+import type { RunPromptExtensionMessage } from "@browser-control-mcp/common";
 import { WebsocketClient } from "./client";
 import { MessageHandler } from "./message-handler";
 import { getConfig, generateSecret } from "./extension-config";
+
+interface ConnectedClient {
+  client: WebsocketClient;
+  messageHandler: MessageHandler;
+}
+
+const clients: ConnectedClient[] = [];
 
 function initClient(port: number, secret: string) {
   console.log("[Extension] Initializing client:", { port });
   const wsClient = new WebsocketClient(port, secret);
   const messageHandler = new MessageHandler(wsClient);
+
+  clients.push({ client: wsClient, messageHandler });
 
   wsClient.connect();
 
@@ -24,6 +34,61 @@ function initClient(port: number, secret: string) {
 
   console.log("[Extension] Client initialized for port:", { port });
 }
+
+// Listen for messages from popup
+browser.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  if (message.type === "run-prompt") {
+    console.log("[Background] Received run-prompt request");
+    const activeClient = clients[0];
+    if (!activeClient) {
+      console.warn("[Background] No active client to handle prompt");
+      return Promise.resolve({ error: "No connection to MCP server" });
+    }
+
+    const correlationId = Math.random().toString(36).substring(2);
+    const promptMsg: RunPromptExtensionMessage = {
+      resource: "run-prompt-request",
+      correlationId,
+      prompt: message.prompt,
+      model: message.model
+    };
+
+    try {
+      activeClient.client.sendResourceToServer(promptMsg);
+      return activeClient.messageHandler.waitForPromptResult(correlationId);
+    } catch (e: any) {
+      return Promise.resolve({ error: e.message });
+    }
+  } else if (message.type === "get-server-status") {
+    console.log("[Background] Received get-server-status request");
+    const activeClient = clients[0];
+    if (!activeClient) {
+      return Promise.resolve({ error: "No connection to MCP server" });
+    }
+    const correlationId = Math.random().toString(36).substring(2);
+    // Use proper message type from common
+    // But direct object is easier for now in background.ts without importing everything
+    const statusMsg = {
+      resource: "get-server-status",
+      correlationId
+    };
+
+    try {
+      activeClient.client.sendResourceToServer(statusMsg as any);
+      return activeClient.messageHandler.waitForResponse(correlationId);
+    } catch (e: any) {
+      return Promise.resolve({ error: e.message });
+    }
+  } else if (message.type === "get-connection-status") {
+    const activeClient = clients[0];
+    if (!activeClient) {
+      return Promise.resolve({ isConnected: false, error: "No client initialized" });
+    }
+    const status = activeClient.client.getConnectionStatus();
+    return Promise.resolve({ isConnected: status.isConnected });
+  }
+  return undefined; // return false/undefined for other messages
+});
 
 async function initExtension() {
   console.log("[Extension] Starting extension initialization...");

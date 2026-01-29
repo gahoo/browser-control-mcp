@@ -28,6 +28,10 @@
   "web_accessible_resources": [
     "dist/media-interceptor.js"
   ],
+  "browser_action": {
+    "default_title": "Browser Control",
+    "default_popup": "popup.html"
+  },
   "background": {
     "scripts": [
       "dist/background.js"

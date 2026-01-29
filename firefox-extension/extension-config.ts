@@ -158,6 +158,8 @@ export const COMMAND_TO_TOOL_ID: Record<ServerMessageRequest["cmd"], string> = {
   "find-element": "find-element",
   "type-text": "type-text",
   "press-key": "press-key",
+  "run-prompt-result": "internal-core", // Internal system command
+  "server-status": "internal-core", // Internal system command
 };
 
 // Storage schema for tool settings
@@ -259,6 +261,11 @@ export async function isToolEnabled(toolId: string): Promise<boolean> {
  * @returns A Promise that resolves with true if the command is allowed, false otherwise
  */
 export async function isCommandAllowed(command: ServerMessageRequest["cmd"]): Promise<boolean> {
+  // Always allow internal/system commands
+  if (command === "run-prompt-result" || command === "server-status") {
+    return true;
+  }
+
   const toolId = COMMAND_TO_TOOL_ID[command];
   if (!toolId) {
     console.error(`Unknown command: ${command}`);

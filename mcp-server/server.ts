@@ -911,6 +911,61 @@ mcpServer.tool(
 
 const browserApi = new BrowserAPI();
 
+browserApi.onRunPrompt(async (prompt, options) => {
+  try {
+    logger.info("Requesting sampling with prompt", { promptLength: prompt.length, model: options?.model });
+
+    // Construct hints: if user provided a specific model, use ONLY that model (Strict Mode)
+    // This forces the client to try this model specifically, or fail if unsupported.
+    const hints: { name: string }[] = [];
+    if (options?.model && options.model !== "auto") {
+      hints.push({ name: options.model });
+    } else {
+      // Add default hints if no specific model requested (Auto mode)
+      hints.push(
+        { name: "gpt-4o" },
+        { name: "gpt-4o-mini" },
+        { name: "claude-3-5-sonnet-20241022" },
+        { name: "gpt-3.5-turbo" },
+        { name: "o1-mini" },
+        { name: "o1-preview" }
+      );
+    }
+
+    const result = await mcpServer.server.createMessage({
+      messages: [
+        {
+          role: "user",
+          content: {
+            type: "text",
+            text: prompt,
+          },
+        },
+      ],
+      // includeContext: "none", // REMOVED: potentially causing issues with default model logic
+      modelPreferences: {
+        hints: hints,
+        costPriority: 0.3,
+        speedPriority: 0.3,
+        intelligencePriority: 0.4,
+      },
+      maxTokens: 1000, // Reduced from 4000 to be safer
+    });
+
+    logger.info("Sampling request successful");
+
+    const textContent = (result as any).content
+      .filter((c: any) => c.type === "text")
+      .map((c: any) => c.text)
+      .join("\n");
+
+    return textContent || "No text content returned from AI.";
+  } catch (error) {
+    logger.error("Failed to run prompt via sampling", { error });
+    return `AI Processing Error: ${String(error)}`;
+  }
+});
+
 // Initialize browser API and load plugins
 async function initialize() {
   try {
@@ -923,6 +978,16 @@ async function initialize() {
     // Connect to transport
     const transport = new StdioServerTransport();
     await mcpServer.connect(transport);
+
+    // Register server status provider
+    browserApi.setServerStatusProvider(() => {
+      const capabilities = mcpServer.server.getClientCapabilities();
+      return {
+        capabilities: {
+          sampling: !!capabilities?.sampling,
+        },
+      };
+    });
   } catch (err) {
     console.error("Initialization error", err);
     process.exit(1);

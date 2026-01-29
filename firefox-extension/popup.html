@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+  <meta charset="utf-8">
+  <link rel="stylesheet" href="popup.css">
+</head>
+
+<body>
+  <div id="app">
+    <div class="header">
+      <h2>Browser Control <span id="status-dot" class="status-dot" title="Checking status..."></span></h2>
+      <button id="settings-btn" title="Settings">⚙️</button>
+    </div>
+
+    <div id="quick-actions-list" class="action-list">
+      <!-- Actions will be injected here -->
+    </div>
+
+    <div class="divider"></div>
+
+    <div id="custom-prompt-section">
+      <div class="model-selector">
+        <select id="model-select">
+          <option value="auto">Auto (Default)</option>
+          <option value="gpt-5-mini" selected>GPT-5 Mini (Copilot)</option>
+          <option value="gpt-4o">GPT-4o</option>
+          <option value="gpt-4o-mini">GPT-4o Mini</option>
+          <option value="gpt-3.5-turbo">GPT-3.5 Turbo</option>
+          <option value="claude-3-5-sonnet-20241022">Claude 3.5 Sonnet</option>
+          <option value="o1-preview">o1 Preview</option>
+          <option value="o1-mini">o1 Mini</option>
+          <option value="custom">Custom...</option>
+        </select>
+        <input type="text" id="custom-model-input" placeholder="Enter model name" style="display: none;">
+      </div>
+      <textarea id="prompt-input" placeholder="Enter prompt or use {{selection}}, {{content}}..."></textarea>
+      <button id="run-prompt-btn">Run Prompt</button>
+    </div>
+
+    <div id="result-area" class="hidden">
+      <h3>Result:</h3>
+      <div id="result-content"></div>
+      <button id="close-result-btn">Close</button>
+    </div>
+
+    <div class="divider"></div>
+
+    <div id="history-section">
+      <h3>History <button id="clear-history-btn" title="Clear History">🗑️</button></h3>
+      <div id="history-list">
+        <!-- History items will be injected here -->
+      </div>
+    </div>
+  </div>
+  <script src="dist/popup.js"></script>
+</body>
+
+</html>

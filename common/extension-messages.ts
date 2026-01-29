@@ -3,6 +3,12 @@ export interface ExtensionMessageBase {
   correlationId: string;
 }
 
+export interface RunPromptExtensionMessage extends ExtensionMessageBase {
+  resource: "run-prompt-request";
+  prompt: string;
+  model?: string; // Optional model preference
+}
+
 export interface TabContentExtensionMessage extends ExtensionMessageBase {
   resource: "tab-content";
   tabId: number;
@@ -218,6 +224,16 @@ export interface KeyPressedExtensionMessage extends ExtensionMessageBase {
   error?: string;
 }
 
+
+export interface RunPromptExtensionMessage extends ExtensionMessageBase {
+  resource: "run-prompt-request";
+  prompt: string;
+}
+
+export interface GetServerStatusExtensionMessage extends ExtensionMessageBase {
+  resource: "get-server-status";
+}
+
 export type ExtensionMessage =
   | TabContentExtensionMessage
   | TabsExtensionMessage
@@ -234,7 +250,6 @@ export type ExtensionMessage =
   | MarkdownContentExtensionMessage
   | DebugPasswordExtensionMessage
   | TabReloadedExtensionMessage
-  | TabReloadedExtensionMessage
   | InterceptedMediaResourcesExtensionMessage
   | BlobDataExtensionMessage
   | FetchedUrlDataExtensionMessage
@@ -242,7 +257,9 @@ export type ExtensionMessage =
   | TabLoadedExtensionMessage
   | ElementFoundExtensionMessage
   | TextTypedExtensionMessage
-  | KeyPressedExtensionMessage;
+  | KeyPressedExtensionMessage
+  | RunPromptExtensionMessage
+  | GetServerStatusExtensionMessage;
 
 export interface ExtensionError {
   correlationId: string;
