@@ -82,7 +82,7 @@ mcpServer.tool(
       }
       return {
         type: "text" as const,
-        text: `tab id=${tab.id}, tab url=${tab.url}, tab title=${tab.title}, last accessed=${lastAccessed}`,
+        text: JSON.stringify({ id: tab.id, url: tab.url, title: tab.title, last_accessed: lastAccessed }),
       };
     });
 
@@ -109,7 +109,7 @@ mcpServer.tool(
           }
           return {
             type: "text",
-            text: `url=${item.url}, title="${item.title}", lastVisitTime=${lastVisited}`,
+            text: JSON.stringify({ url: item.url, title: item.title, last_visit_time: lastVisited }),
           };
         }),
       };
@@ -256,7 +256,7 @@ mcpServer.tool(
     return {
       content: groups.map((group) => ({
         type: "text" as const,
-        text: `group id=${group.id}, title="${group.title || "(untitled)"}", color=${group.color || "grey"}, collapsed=${group.collapsed || false}`,
+        text: JSON.stringify({ id: group.id, title: group.title || null, color: group.color || "grey", collapsed: group.collapsed || false }),
       })),
     };
   }
@@ -293,7 +293,7 @@ mcpServer.tool(
         }
         return {
           type: "text" as const,
-          text: `tab id=${tab.id}, tab url=${tab.url}, tab title=${tab.title}, last accessed=${lastAccessed}`,
+          text: JSON.stringify({ id: tab.id, url: tab.url, title: tab.title, last_accessed: lastAccessed }),
         };
       }),
     };
@@ -317,7 +317,7 @@ mcpServer.tool(
     return {
       content: elements.map((el) => ({
         type: "text" as const,
-        text: `[${el.index}] <${el.tagName}> "${el.textContent}"${el.href ? ` href="${el.href}"` : ""} selector="${el.selector}" xpath="${el.xpath}"`,
+        text: JSON.stringify({ index: el.index, tag: el.tagName, text: el.textContent, href: el.href || null, selector: el.selector, xpath: el.xpath }),
       })),
     };
   }
