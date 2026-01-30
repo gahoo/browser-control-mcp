@@ -59,3 +59,4 @@ web-ext-artifacts/
 # test
 test/*
 test/.gemini/settings.json
+.gemini/settings.json

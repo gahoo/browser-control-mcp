@@ -205,12 +205,17 @@ export class MessageHandler {
   }
 
   private async openUrl(correlationId: string, url: string): Promise<void> {
-    if (!url.startsWith("https://")) {
-      console.error("[MessageHandler] Invalid URL - must start with https://:", url);
+    // Allow https:// and specific protocol handlers like obsidian://
+    const allowedProtocols = ["https://", "obsidian://"];
+    const isAllowedProtocol = allowedProtocols.some(protocol => url.startsWith(protocol));
+
+    if (!isAllowedProtocol) {
+      console.error("[MessageHandler] Invalid URL - must start with https:// or a supported protocol:", url);
       throw new Error("Invalid URL");
     }
 
-    if (await isDomainInDenyList(url)) {
+    // Only check deny list for https URLs (protocol handlers don't have domains)
+    if (url.startsWith("https://") && await isDomainInDenyList(url)) {
       console.warn("[MessageHandler] URL domain in deny list:", url);
       throw new Error("Domain in user defined deny list");
     }
