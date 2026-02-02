@@ -53,71 +53,184 @@ mcpServer.tool(
 
 mcpServer.tool(
   "get-list-of-open-tabs",
-  "Get the list of open tabs in the user's browser. Use offset and limit parameters for pagination when there are many tabs.",
-  {
-    offset: z.number().int().min(0).default(0).describe("Starting index for pagination (0-based, must be >= 0)"),
-    limit: z.number().default(100).describe("Maximum number of tabs to return (default: 100, max: 500)"),
-  },
-  async ({ offset, limit }) => {
-    // Validate and cap the limit
-    const effectiveLimit = Math.min(Math.max(1, limit), 500);
+  `Get the list of open tabs in the user's browser.
+  
+Pagination:
+- batch_size: Limit the number of results returned (optional, returns all if not specified)
+- last_id: Return results starting after this tab ID (cursor-based pagination)
 
-    const openTabs = await browserApi.getTabList();
+Dump:
+- dump: Save query results to a file at the specified path (returns only file path and count)`,
+  {
+    batch_size: z.number().int().min(1).max(500).optional().describe("Maximum number of tabs to return (1-500)"),
+    last_id: z.number().int().optional().describe("Return results starting after this tab ID"),
+    dump: z.string().optional().describe("Save results to file at this path"),
+  },
+  async ({ batch_size, last_id, dump }) => {
+    let openTabs = await browserApi.getTabList();
     const totalTabs = openTabs.length;
 
-    // Apply pagination
-    const paginatedTabs = openTabs.slice(offset, offset + effectiveLimit);
-    const hasMore = offset + effectiveLimit < totalTabs;
+    // Apply cursor-based pagination
+    if (last_id !== undefined) {
+      const lastIdIndex = openTabs.findIndex((tab) => tab.id === last_id);
+      if (lastIdIndex !== -1) {
+        openTabs = openTabs.slice(lastIdIndex + 1);
+      }
+    }
 
-    // Add pagination info as the first content item
-    const paginationInfo = {
-      type: "text" as const,
-      text: `Showing tabs ${offset + 1}-${offset + paginatedTabs.length} of ${totalTabs} total tabs${hasMore ? ` (use offset=${offset + effectiveLimit} to see more)` : ''}`,
-    };
+    // Apply batch_size
+    const hasMore = batch_size !== undefined && openTabs.length > batch_size;
+    const paginatedTabs = batch_size !== undefined ? openTabs.slice(0, batch_size) : openTabs;
 
-    const tabContent = paginatedTabs.map((tab) => {
+    // Handle empty results
+    if (paginatedTabs.length === 0) {
+      const message = last_id !== undefined
+        ? "No more tabs after the specified last_id"
+        : "No open tabs found";
+      return {
+        content: [{ type: "text", text: message }],
+      };
+    }
+
+    // Format tabs
+    const formattedTabs = paginatedTabs.map((tab) => {
       let lastAccessed = "unknown";
       if (tab.lastAccessed) {
-        lastAccessed = dayjs(tab.lastAccessed).fromNow(); // LLM-friendly time ago
+        lastAccessed = dayjs(tab.lastAccessed).fromNow();
       }
-      return {
-        type: "text" as const,
-        text: JSON.stringify({ id: tab.id, url: tab.url, title: tab.title, last_accessed: lastAccessed }),
-      };
+      return { id: tab.id, url: tab.url, title: tab.title, last_accessed: lastAccessed };
     });
 
+    // Handle dump
+    if (dump) {
+      try {
+        const dir = path.dirname(dump);
+        await fs.mkdir(dir, { recursive: true });
+        await fs.writeFile(dump, JSON.stringify(formattedTabs, null, 2), "utf-8");
+
+        const lastTab = paginatedTabs[paginatedTabs.length - 1];
+        const resultParts = [
+          `Saved ${formattedTabs.length} tabs to: ${dump}`,
+          `Total available: ${totalTabs}`,
+        ];
+        if (hasMore && lastTab?.id !== undefined) {
+          resultParts.push(`More results available. Use last_id=${lastTab.id} to continue.`);
+        }
+
+        return {
+          content: [{ type: "text", text: resultParts.join("\n") }],
+        };
+      } catch (e) {
+        return {
+          content: [{ type: "text", text: `Error saving to file: ${String(e)}`, isError: true }],
+        };
+      }
+    }
+
+    // Build standard response
+    const lastTab = paginatedTabs[paginatedTabs.length - 1];
+    const paginationInfo = hasMore && lastTab?.id !== undefined
+      ? `\n\n---\nShowing ${paginatedTabs.length} of ${totalTabs} total. Use last_id=${lastTab.id} to get more.`
+      : "";
+
     return {
-      content: [paginationInfo, ...tabContent],
+      content: [
+        ...formattedTabs.map((tab) => ({
+          type: "text" as const,
+          text: JSON.stringify(tab),
+        })),
+        ...(paginationInfo ? [{ type: "text" as const, text: paginationInfo }] : []),
+      ],
     };
   }
 );
 
 mcpServer.tool(
   "get-recent-browser-history",
-  "Get the list of recent browser history (to get all, don't use searchQuery)",
-  { searchQuery: z.string().optional() },
-  async ({ searchQuery }) => {
-    const browserHistory = await browserApi.getBrowserRecentHistory(
+  `Get the list of recent browser history.
+  
+Pagination:
+- batch_size: Limit the number of results returned (optional, returns all if not specified)
+- last_visit_time: Return records older than this timestamp (cursor-based pagination)
+
+Dump:
+- dump: Save results to a file at the specified path (returns only file path and count)`,
+  {
+    searchQuery: z.string().optional().describe("Filter history by search query"),
+    batch_size: z.number().int().min(1).max(200).optional().describe("Maximum number of history items to return (1-200)"),
+    last_visit_time: z.number().optional().describe("Return history older than this timestamp (cursor)"),
+    dump: z.string().optional().describe("Save results to file at this path"),
+  },
+  async ({ searchQuery, batch_size, last_visit_time, dump }) => {
+    let browserHistory = await browserApi.getBrowserRecentHistory(
       searchQuery
     );
-    if (browserHistory.length > 0) {
+    const totalHistory = browserHistory.length;
+
+    // Apply cursor-based pagination (older than last_visit_time)
+    if (last_visit_time !== undefined) {
+      browserHistory = browserHistory.filter(item => item.lastVisitTime !== undefined && item.lastVisitTime < last_visit_time);
+    }
+
+    // Apply batch_size
+    const hasMore = batch_size !== undefined && browserHistory.length > batch_size;
+    const paginatedHistory = batch_size !== undefined ? browserHistory.slice(0, batch_size) : browserHistory;
+
+    // Format history items
+    const formattedHistory = paginatedHistory.map((item) => {
+      let lastVisited = "unknown";
+      if (item.lastVisitTime) {
+        lastVisited = dayjs(item.lastVisitTime).fromNow();
+      }
+      return { url: item.url, title: item.title, last_visit_time: lastVisited, timestamp: item.lastVisitTime };
+    });
+
+    // Handle dump
+    if (dump) {
+      try {
+        const dir = path.dirname(dump);
+        await fs.mkdir(dir, { recursive: true });
+        await fs.writeFile(dump, JSON.stringify(formattedHistory, null, 2), "utf-8");
+
+        const lastItem = paginatedHistory[paginatedHistory.length - 1];
+        const resultParts = [
+          `Saved ${formattedHistory.length} history items to: ${dump}`,
+          `Total available: ${totalHistory}`,
+        ];
+        if (hasMore && lastItem?.lastVisitTime) {
+          resultParts.push(`More results available. Use last_visit_time=${lastItem.lastVisitTime} to continue.`);
+        }
+
+        return {
+          content: [{ type: "text", text: resultParts.join("\n") }],
+        };
+      } catch (e) {
+        return {
+          content: [{ type: "text", text: `Error saving to file: ${String(e)}`, isError: true }],
+        };
+      }
+    }
+
+    const lastItem = paginatedHistory[paginatedHistory.length - 1];
+    const paginationInfo = hasMore && lastItem?.lastVisitTime
+      ? `\n\n---\nShowing ${formattedHistory.length} of ${totalHistory} total. Use last_visit_time=${lastItem.lastVisitTime} to get more.`
+      : "";
+
+    if (paginatedHistory.length > 0) {
       return {
-        content: browserHistory.map((item) => {
-          let lastVisited = "unknown";
-          if (item.lastVisitTime) {
-            lastVisited = dayjs(item.lastVisitTime).fromNow(); // LLM-friendly time ago
-          }
-          return {
-            type: "text",
-            text: JSON.stringify({ url: item.url, title: item.title, last_visit_time: lastVisited }),
-          };
-        }),
+        content: [
+          ...formattedHistory.map((item) => ({
+            type: "text" as const,
+            text: JSON.stringify(item),
+          })),
+          ...(paginationInfo ? [{ type: "text" as const, text: paginationInfo }] : []),
+        ],
       };
     } else {
-      // If nothing was found for the search query, hint the AI to list
-      // all the recent history items instead.
-      const hint = searchQuery ? "Try without a searchQuery" : "";
-      return { content: [{ type: "text", text: `No history found. ${hint}` }] };
+      const message = last_visit_time !== undefined
+        ? "No more history older than the specified timestamp"
+        : (searchQuery ? `No history found. Try without a searchQuery` : "No history found");
+      return { content: [{ type: "text", text: message }] };
     }
   }
 );
@@ -264,7 +377,14 @@ mcpServer.tool(
 
 mcpServer.tool(
   "query-open-tabs",
-  "Search/filter open tabs with flexible query options. Use 'active: true, currentWindow: true' to get the current tab.",
+  `Search/filter open tabs with flexible query options. Use 'active: true, currentWindow: true' to get the current tab.
+
+Pagination:
+- batch_size: Limit the number of results returned (useful for large tab lists)
+- last_id: Return results starting after this tab ID (cursor-based pagination)
+
+Dump:
+- dump: Save query results to a file at the specified path (returns only file path and count)`,
   {
     title: z.string().optional().describe("Filter tabs whose title contains this string (case-insensitive)"),
     url: z.string().optional().describe("Filter tabs whose URL contains this string (case-insensitive)"),
@@ -275,50 +395,175 @@ mcpServer.tool(
     audible: z.boolean().optional().describe("True = tabs currently playing audio"),
     muted: z.boolean().optional().describe("True = muted tabs only"),
     status: z.enum(["loading", "complete"]).optional().describe("Filter by page load status"),
+    batch_size: z.number().int().min(1).max(1000).optional().describe("Maximum number of tabs to return (1-1000)"),
+    last_id: z.number().int().optional().describe("Return tabs after this tab ID (cursor-based pagination)"),
+    dump: z.string().optional().describe("Save results to file at this path (returns path and count only)"),
   },
-  async ({ title, url, groupId, active, currentWindow, pinned, audible, muted, status }) => {
-    const matchingTabs = await browserApi.queryTabs(
+  async ({ title, url, groupId, active, currentWindow, pinned, audible, muted, status, batch_size, last_id, dump }) => {
+    let matchingTabs = await browserApi.queryTabs(
       title, url, groupId, active, currentWindow, pinned, audible, muted, status
     );
+
+    const totalMatching = matchingTabs.length;
+
+    // Apply cursor-based pagination: filter tabs after last_id
+    if (last_id !== undefined) {
+      const lastIdIndex = matchingTabs.findIndex((tab) => tab.id === last_id);
+      if (lastIdIndex !== -1) {
+        matchingTabs = matchingTabs.slice(lastIdIndex + 1);
+      }
+      // If last_id not found, return all tabs (user may have closed that tab)
+    }
+
+    // Apply batch_size limit
+    const hasMore = batch_size !== undefined && matchingTabs.length > batch_size;
+    if (batch_size !== undefined) {
+      matchingTabs = matchingTabs.slice(0, batch_size);
+    }
+
     if (matchingTabs.length === 0) {
       return {
         content: [{ type: "text", text: "No matching tabs found" }],
       };
     }
-    return {
-      content: matchingTabs.map((tab) => {
-        let lastAccessed = "unknown";
-        if (tab.lastAccessed) {
-          lastAccessed = dayjs(tab.lastAccessed).fromNow();
+
+    // Format tabs with relative time
+    const formattedTabs = matchingTabs.map((tab) => {
+      let lastAccessed = "unknown";
+      if (tab.lastAccessed) {
+        lastAccessed = dayjs(tab.lastAccessed).fromNow();
+      }
+      return { id: tab.id, url: tab.url, title: tab.title, last_accessed: lastAccessed };
+    });
+
+    // If dump path is provided, save to file
+    if (dump) {
+      try {
+        const dir = path.dirname(dump);
+        await fs.mkdir(dir, { recursive: true });
+        await fs.writeFile(dump, JSON.stringify(formattedTabs, null, 2), "utf-8");
+
+        const lastTab = matchingTabs[matchingTabs.length - 1];
+        const resultParts = [
+          `Saved ${formattedTabs.length} tabs to: ${dump}`,
+          `Total matching: ${totalMatching}`,
+        ];
+        if (hasMore && lastTab?.id !== undefined) {
+          resultParts.push(`More results available. Use last_id=${lastTab.id} to continue.`);
         }
+
         return {
-          type: "text" as const,
-          text: JSON.stringify({ id: tab.id, url: tab.url, title: tab.title, last_accessed: lastAccessed }),
+          content: [{ type: "text", text: resultParts.join("\n") }],
         };
-      }),
+      } catch (e) {
+        return {
+          content: [{ type: "text", text: `Error saving to file: ${String(e)}`, isError: true }],
+        };
+      }
+    }
+
+    // Build pagination info
+    const lastTab = matchingTabs[matchingTabs.length - 1];
+    const paginationInfo = hasMore && lastTab?.id !== undefined
+      ? `\n\n---\nShowing ${formattedTabs.length} of ${totalMatching} total. Use last_id=${lastTab.id} to get more.`
+      : "";
+
+    return {
+      content: [
+        ...formattedTabs.map((tab) => ({
+          type: "text" as const,
+          text: JSON.stringify(tab),
+        })),
+        ...(paginationInfo ? [{ type: "text" as const, text: paginationInfo }] : []),
+      ],
     };
   }
 );
 
 mcpServer.tool(
   "get-clickable-elements",
-  "Get a list of clickable elements (links and buttons) on a web page. Returns textContent, CSS selector, and XPath for each element.",
+  `Get a list of clickable elements (links and buttons).
+  
+Pagination:
+- batch_size: Limit number of results (optional, returns all if not specified)
+- last_index: Return elements with index greater than this (cursor)
+
+Dump:
+- dump: Save to file`,
   {
     tabId: z.number().describe("Tab ID to get clickable elements from"),
     selector: z.string().optional().describe("Optional CSS selector to filter elements"),
+    batch_size: z.number().int().min(1).max(1000).optional().describe("Maximum number of elements to return (1-1000)"),
+    last_index: z.number().int().optional().describe("Return elements with index greater than this (cursor)"),
+    dump: z.string().optional().describe("Save results to file at this path"),
   },
-  async ({ tabId, selector }) => {
-    const elements = await browserApi.getClickableElements(tabId, selector);
-    if (elements.length === 0) {
+  async ({ tabId, selector, batch_size, last_index, dump }) => {
+    let elements = await browserApi.getClickableElements(tabId, selector);
+    const totalElements = elements.length;
+
+    // Apply cursor-based pagination
+    if (last_index !== undefined) {
+      elements = elements.filter(el => el.index > last_index);
+    }
+
+    // Apply batch_size
+    const hasMore = batch_size !== undefined && elements.length > batch_size;
+    const paginatedElements = batch_size !== undefined ? elements.slice(0, batch_size) : elements;
+
+    if (paginatedElements.length === 0) {
       return {
         content: [{ type: "text", text: "No clickable elements found" }],
       };
     }
+
+    const formattedElements = paginatedElements.map((el) => ({
+      index: el.index,
+      tag: el.tagName,
+      text: el.textContent,
+      href: el.href || null,
+      selector: el.selector,
+      xpath: el.xpath
+    }));
+
+    // Handle dump
+    if (dump) {
+      try {
+        const dir = path.dirname(dump);
+        await fs.mkdir(dir, { recursive: true });
+        await fs.writeFile(dump, JSON.stringify(formattedElements, null, 2), "utf-8");
+
+        const lastElement = paginatedElements[paginatedElements.length - 1];
+        const resultParts = [
+          `Saved ${formattedElements.length} elements to: ${dump}`,
+          `Total available: ${totalElements}`,
+        ];
+        if (hasMore && lastElement?.index !== undefined) {
+          resultParts.push(`More results available. Use last_index=${lastElement.index} to continue.`);
+        }
+
+        return {
+          content: [{ type: "text", text: resultParts.join("\n") }],
+        };
+      } catch (e) {
+        return {
+          content: [{ type: "text", text: `Error saving to file: ${String(e)}`, isError: true }],
+        };
+      }
+    }
+
+    const lastElement = paginatedElements[paginatedElements.length - 1];
+    const paginationInfo = hasMore && lastElement?.index !== undefined
+      ? `\n\n---\nShowing ${formattedElements.length} of ${totalElements} total. Use last_index=${lastElement.index} to get more.`
+      : "";
+
     return {
-      content: elements.map((el) => ({
-        type: "text" as const,
-        text: JSON.stringify({ index: el.index, tag: el.tagName, text: el.textContent, href: el.href || null, selector: el.selector, xpath: el.xpath }),
-      })),
+      content: [
+        ...formattedElements.map((el) => ({
+          type: "text" as const,
+          text: JSON.stringify(el),
+        })),
+        ...(paginationInfo ? [{ type: "text" as const, text: paginationInfo }] : []),
+      ],
     };
   }
 );

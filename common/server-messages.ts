@@ -62,6 +62,9 @@ export interface QueryTabsServerMessage extends ServerMessageBase {
   audible?: boolean;
   muted?: boolean;
   status?: "loading" | "complete";
+  batchSize?: number;
+  lastId?: number;
+  dump?: string;
 }
 
 export interface GetClickableElementsServerMessage extends ServerMessageBase {
