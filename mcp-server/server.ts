@@ -11,6 +11,20 @@ import relativeTime from "dayjs/plugin/relativeTime";
 
 dayjs.extend(relativeTime);
 
+// Helper function to pick specific fields from an object
+function pickFields<T extends Record<string, any>>(obj: T, fields?: string[]): Partial<T> {
+  if (!fields || fields.length === 0) {
+    return obj; // Return all fields if not specified
+  }
+  const result: Partial<T> = {};
+  for (const field of fields) {
+    if (field in obj) {
+      result[field as keyof T] = obj[field as keyof T];
+    }
+  }
+  return result;
+}
+
 const mcpServer = new McpServer({
   name: "BrowserControl",
   version: "1.5.1",
@@ -59,14 +73,18 @@ Pagination:
 - batch_size: Limit the number of results returned (optional, returns all if not specified)
 - last_id: Return results starting after this tab ID (cursor-based pagination)
 
+Output:
+- fields: Array of field names to include (id, url, title, last_accessed). Returns all if not specified.
+
 Dump:
 - dump: Save query results to a file at the specified path (returns only file path and count)`,
   {
     batch_size: z.number().int().min(1).max(500).optional().describe("Maximum number of tabs to return (1-500)"),
     last_id: z.number().int().optional().describe("Return results starting after this tab ID"),
+    fields: z.array(z.enum(["id", "url", "title", "last_accessed"])).optional().describe("Fields to include in output"),
     dump: z.string().optional().describe("Save results to file at this path"),
   },
-  async ({ batch_size, last_id, dump }) => {
+  async ({ batch_size, last_id, fields, dump }) => {
     let openTabs = await browserApi.getTabList();
     const totalTabs = openTabs.length;
 
@@ -98,7 +116,8 @@ Dump:
       if (tab.lastAccessed) {
         lastAccessed = dayjs(tab.lastAccessed).fromNow();
       }
-      return { id: tab.id, url: tab.url, title: tab.title, last_accessed: lastAccessed };
+      const fullTab = { id: tab.id, url: tab.url, title: tab.title, last_accessed: lastAccessed };
+      return pickFields(fullTab, fields);
     });
 
     // Handle dump
@@ -153,15 +172,19 @@ Pagination:
 - batch_size: Limit the number of results returned (optional, returns all if not specified)
 - last_visit_time: Return records older than this timestamp (cursor-based pagination)
 
+Output:
+- fields: Array of field names to include (url, title, last_visit_time, timestamp). Returns all if not specified.
+
 Dump:
 - dump: Save results to a file at the specified path (returns only file path and count)`,
   {
     searchQuery: z.string().optional().describe("Filter history by search query"),
     batch_size: z.number().int().min(1).max(200).optional().describe("Maximum number of history items to return (1-200)"),
     last_visit_time: z.number().optional().describe("Return history older than this timestamp (cursor)"),
+    fields: z.array(z.enum(["url", "title", "last_visit_time", "timestamp"])).optional().describe("Fields to include in output"),
     dump: z.string().optional().describe("Save results to file at this path"),
   },
-  async ({ searchQuery, batch_size, last_visit_time, dump }) => {
+  async ({ searchQuery, batch_size, last_visit_time, fields, dump }) => {
     let browserHistory = await browserApi.getBrowserRecentHistory(
       searchQuery
     );
@@ -182,7 +205,8 @@ Dump:
       if (item.lastVisitTime) {
         lastVisited = dayjs(item.lastVisitTime).fromNow();
       }
-      return { url: item.url, title: item.title, last_visit_time: lastVisited, timestamp: item.lastVisitTime };
+      const fullItem = { url: item.url, title: item.title, last_visit_time: lastVisited, timestamp: item.lastVisitTime };
+      return pickFields(fullItem, fields);
     });
 
     // Handle dump
@@ -383,6 +407,9 @@ Pagination:
 - batch_size: Limit the number of results returned (useful for large tab lists)
 - last_id: Return results starting after this tab ID (cursor-based pagination)
 
+Output:
+- fields: Array of field names to include (id, url, title, last_accessed). Returns all if not specified.
+
 Dump:
 - dump: Save query results to a file at the specified path (returns only file path and count)`,
   {
@@ -397,9 +424,10 @@ Dump:
     status: z.enum(["loading", "complete"]).optional().describe("Filter by page load status"),
     batch_size: z.number().int().min(1).max(1000).optional().describe("Maximum number of tabs to return (1-1000)"),
     last_id: z.number().int().optional().describe("Return tabs after this tab ID (cursor-based pagination)"),
+    fields: z.array(z.enum(["id", "url", "title", "last_accessed"])).optional().describe("Fields to include in output"),
     dump: z.string().optional().describe("Save results to file at this path (returns path and count only)"),
   },
-  async ({ title, url, groupId, active, currentWindow, pinned, audible, muted, status, batch_size, last_id, dump }) => {
+  async ({ title, url, groupId, active, currentWindow, pinned, audible, muted, status, batch_size, last_id, fields, dump }) => {
     let matchingTabs = await browserApi.queryTabs(
       title, url, groupId, active, currentWindow, pinned, audible, muted, status
     );
@@ -433,7 +461,8 @@ Dump:
       if (tab.lastAccessed) {
         lastAccessed = dayjs(tab.lastAccessed).fromNow();
       }
-      return { id: tab.id, url: tab.url, title: tab.title, last_accessed: lastAccessed };
+      const fullTab = { id: tab.id, url: tab.url, title: tab.title, last_accessed: lastAccessed };
+      return pickFields(fullTab, fields);
     });
 
     // If dump path is provided, save to file
@@ -488,6 +517,9 @@ Pagination:
 - batch_size: Limit number of results (optional, returns all if not specified)
 - last_index: Return elements with index greater than this (cursor)
 
+Output:
+- fields: Array of field names to include (index, tag, text, href, selector, xpath). Returns all if not specified.
+
 Dump:
 - dump: Save to file`,
   {
@@ -495,9 +527,10 @@ Dump:
     selector: z.string().optional().describe("Optional CSS selector to filter elements"),
     batch_size: z.number().int().min(1).max(1000).optional().describe("Maximum number of elements to return (1-1000)"),
     last_index: z.number().int().optional().describe("Return elements with index greater than this (cursor)"),
+    fields: z.array(z.enum(["index", "tag", "text", "href", "selector", "xpath"])).optional().describe("Fields to include in output"),
     dump: z.string().optional().describe("Save results to file at this path"),
   },
-  async ({ tabId, selector, batch_size, last_index, dump }) => {
+  async ({ tabId, selector, batch_size, last_index, fields, dump }) => {
     let elements = await browserApi.getClickableElements(tabId, selector);
     const totalElements = elements.length;
 
@@ -516,14 +549,17 @@ Dump:
       };
     }
 
-    const formattedElements = paginatedElements.map((el) => ({
-      index: el.index,
-      tag: el.tagName,
-      text: el.textContent,
-      href: el.href || null,
-      selector: el.selector,
-      xpath: el.xpath
-    }));
+    const formattedElements = paginatedElements.map((el) => {
+      const fullElement = {
+        index: el.index,
+        tag: el.tagName,
+        text: el.textContent,
+        href: el.href || null,
+        selector: el.selector,
+        xpath: el.xpath
+      };
+      return pickFields(fullElement, fields);
+    });
 
     // Handle dump
     if (dump) {
