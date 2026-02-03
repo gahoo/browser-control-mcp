@@ -157,6 +157,7 @@ function findElement(payload: { query: string, mode: "css" | "xpath" | "text" | 
         index,
         tagName: (el as HTMLElement).tagName?.toLowerCase() || '',
         text: (el.textContent || '').trim().substring(0, 100),
+        html: ((el as HTMLElement).outerHTML || '').substring(0, 500),
         selector: getUniqueSelector(el as HTMLElement),
         xpath: getXPath(el as HTMLElement),
         isVisible: isVisible(el as HTMLElement)

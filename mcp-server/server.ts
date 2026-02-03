@@ -32,11 +32,37 @@ const mcpServer = new McpServer({
 
 mcpServer.tool(
   "open-browser-tab",
-  "Open a new tab in the user's browser (useful when the user asks to open a website)",
-  { url: z.string() },
-  async ({ url }) => {
+  "Open a new tab in the user's browser, optionally in a specific tab group (use get-browser-tab-groups to find existing group IDs)",
+  {
+    url: z.string().describe("URL to open"),
+    groupId: z.number().optional().describe("Optional tab group ID to add the new tab to")
+  },
+  async ({ url, groupId }) => {
     const openedTabId = await browserApi.openTab(url);
     if (openedTabId !== undefined) {
+      // Add to group if groupId is specified
+      if (groupId !== undefined) {
+        try {
+          await browserApi.groupTabs([openedTabId], false, "grey", undefined, groupId);
+          return {
+            content: [
+              {
+                type: "text",
+                text: `${url} opened in tab id ${openedTabId} and added to group ${groupId}`,
+              },
+            ],
+          };
+        } catch (e) {
+          return {
+            content: [
+              {
+                type: "text",
+                text: `${url} opened in tab id ${openedTabId}, but failed to add to group: ${String(e)}`,
+              },
+            ],
+          };
+        }
+      }
       return {
         content: [
           {
@@ -1120,13 +1146,17 @@ mcpServer.tool(
 
 mcpServer.tool(
   "find-element",
-  "Find elements on a webpage using CSS selectors, XPath, text content, or Regular Expression. Returns a list of found elements with their 0-based index which can be used with click-element.",
+  `Find elements on a webpage using CSS selectors, XPath, text content, or Regular Expression. Returns JSON list of found elements with their 0-based index which can be used with click-element.
+
+Output:
+- fields: Array of field names to include (index, tagName, text, html, selector, xpath). Returns all if not specified.`,
   {
     tabId: z.number().describe("The ID of the tab to search in"),
     query: z.string().describe("The search query (selector, xpath, text, or regex pattern)"),
     mode: z.enum(["css", "xpath", "text", "regexp"]).default("css").describe("The search mode: 'css' (selector), 'xpath', 'text' (substring match), or 'regexp' (regular expression)"),
+    fields: z.array(z.enum(["index", "tagName", "text", "html", "selector", "xpath"])).optional().describe("Fields to include in output"),
   },
-  async ({ tabId, query, mode }) => {
+  async ({ tabId, query, mode, fields }) => {
     const elements = await browserApi.findElement(tabId, query, mode);
 
     if (elements.length === 0) {
@@ -1136,17 +1166,22 @@ mcpServer.tool(
     }
 
     const formattedElements = elements.map((el) => {
-      let text = `[${el.index}] <${el.tagName}> "${el.text}"`;
-      if (el.selector) text += ` CSS: ${el.selector}`;
-      if (el.xpath) text += ` XPath: ${el.xpath}`;
-      return text;
-    }).join("\n");
+      const fullElement = {
+        index: el.index,
+        tagName: el.tagName,
+        text: el.text,
+        html: el.html,
+        selector: el.selector,
+        xpath: el.xpath,
+      };
+      return pickFields(fullElement, fields);
+    });
 
     return {
       content: [
         {
           type: "text",
-          text: `Found ${elements.length} elements:\n${formattedElements}`,
+          text: JSON.stringify({ count: elements.length, elements: formattedElements }, null, 2),
         },
       ],
     };

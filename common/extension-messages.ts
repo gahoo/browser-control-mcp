@@ -202,6 +202,7 @@ export interface FoundElement {
   index: number;
   tagName: string;
   text: string;
+  html: string;
   selector: string;
   xpath: string;
   isVisible?: boolean;
