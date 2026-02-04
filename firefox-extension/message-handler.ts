@@ -424,11 +424,13 @@ export class MessageHandler {
     isCollapsed?: boolean,
     groupColor?: browser.tabGroups.Color,
     groupTitle?: string,
-    existingGroupId?: number
+    existingGroupIdStr?: string
   ): Promise<void> {
+    // Convert string groupId to number for browser API (browser uses numeric IDs internally)
+    const existingGroupId = existingGroupIdStr !== undefined ? parseInt(existingGroupIdStr, 10) : undefined;
     let groupId: number;
 
-    if (existingGroupId !== undefined) {
+    if (existingGroupId !== undefined && !isNaN(existingGroupId)) {
       // Add tabs to an existing group
       groupId = await browser.tabs.group({
         tabIds,
@@ -453,10 +455,11 @@ export class MessageHandler {
       }
     }
 
+    // Convert numeric groupId to string to prevent precision loss
     await this.client.sendResourceToServer({
       resource: "new-tab-group",
       correlationId,
-      groupId,
+      groupId: String(groupId),
     });
   }
 
@@ -465,8 +468,9 @@ export class MessageHandler {
     await this.client.sendResourceToServer({
       resource: "tab-groups",
       correlationId,
+      // Convert numeric IDs to strings to prevent precision loss
       groups: groups.map((g) => ({
-        id: g.id,
+        id: String(g.id),
         title: g.title,
         color: g.color,
         collapsed: g.collapsed,
@@ -478,7 +482,7 @@ export class MessageHandler {
     correlationId: string,
     title?: string,
     url?: string,
-    groupId?: number,
+    groupIdStr?: string,
     active?: boolean,
     currentWindow?: boolean,
     pinned?: boolean,
@@ -486,6 +490,9 @@ export class MessageHandler {
     muted?: boolean,
     status?: "loading" | "complete"
   ): Promise<void> {
+    // Convert string groupId to number for comparison with browser API
+    const groupId = groupIdStr !== undefined ? parseInt(groupIdStr, 10) : undefined;
+
     // Build query object for browser.tabs.query
     const queryInfo: any = {};
     if (active !== undefined) queryInfo.active = active;
@@ -505,7 +512,7 @@ export class MessageHandler {
       const matchUrl =
         !url || (t.url && t.url.toLowerCase().includes(url.toLowerCase()));
       const matchGroup =
-        groupId === undefined || (t.groupId !== undefined && t.groupId === groupId);
+        groupId === undefined || isNaN(groupId) || (t.groupId !== undefined && t.groupId === groupId);
       return matchTitle && matchUrl && matchGroup;
     });
     await this.client.sendResourceToServer({

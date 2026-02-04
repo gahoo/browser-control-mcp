@@ -44,7 +44,7 @@ export interface GroupTabsServerMessage extends ServerMessageBase {
   isCollapsed?: boolean;
   groupColor?: string;
   groupTitle?: string;
-  groupId?: number;
+  groupId?: string;
 }
 
 export interface GetTabGroupsServerMessage extends ServerMessageBase {
@@ -55,7 +55,7 @@ export interface QueryTabsServerMessage extends ServerMessageBase {
   cmd: "query-tabs";
   title?: string;
   url?: string;
-  groupId?: number;
+  groupId?: string;
   active?: boolean;
   currentWindow?: boolean;
   pinned?: boolean;

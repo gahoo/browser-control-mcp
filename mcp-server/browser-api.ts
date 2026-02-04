@@ -268,8 +268,8 @@ export class BrowserAPI {
     isCollapsed?: boolean,
     groupColor?: string,
     groupTitle?: string,
-    groupId?: number
-  ): Promise<number> {
+    groupId?: string
+  ): Promise<string> {
     const correlationId = this.sendMessageToExtension({
       cmd: "group-tabs",
       tabIds,
@@ -293,7 +293,7 @@ export class BrowserAPI {
   async queryTabs(
     title?: string,
     url?: string,
-    groupId?: number,
+    groupId?: string,
     active?: boolean,
     currentWindow?: boolean,
     pinned?: boolean,

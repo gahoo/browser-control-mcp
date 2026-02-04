@@ -63,11 +63,11 @@ export interface TabsClosedExtensionMessage extends ExtensionMessageBase {
 
 export interface TabGroupCreatedExtensionMessage extends ExtensionMessageBase {
   resource: "new-tab-group";
-  groupId: number;
+  groupId: string;
 }
 
 export interface BrowserTabGroup {
-  id: number;
+  id: string;
   title?: string;
   color?: string;
   collapsed?: boolean;

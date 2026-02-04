@@ -35,7 +35,7 @@ mcpServer.tool(
   "Open a new tab in the user's browser, optionally in a specific tab group (use get-browser-tab-groups to find existing group IDs)",
   {
     url: z.string().describe("URL to open"),
-    groupId: z.number().optional().describe("Optional tab group ID to add the new tab to")
+    groupId: z.string().optional().describe("Optional tab group ID to add the new tab to")
   },
   async ({ url, groupId }) => {
     const openedTabId = await browserApi.openTab(url);
@@ -366,7 +366,7 @@ mcpServer.tool(
   "Organize opened browser tabs in a tab group. If groupId is provided, tabs will be added to that existing group; otherwise a new group will be created.",
   {
     tabIds: z.array(z.number()).describe("Array of tab IDs to group"),
-    groupId: z.number().optional().describe("Optional existing group ID to add tabs to"),
+    groupId: z.string().optional().describe("Optional existing group ID to add tabs to"),
     isCollapsed: z.boolean().optional().default(false).describe("Whether the group should be collapsed"),
     groupColor: z
       .enum([
@@ -441,7 +441,7 @@ Dump:
   {
     title: z.string().optional().describe("Filter tabs whose title contains this string (case-insensitive)"),
     url: z.string().optional().describe("Filter tabs whose URL contains this string (case-insensitive)"),
-    groupId: z.number().optional().describe("Filter tabs belonging to this group ID"),
+    groupId: z.string().optional().describe("Filter tabs belonging to this group ID"),
     active: z.boolean().optional().describe("True = only active tab in each window"),
     currentWindow: z.boolean().optional().describe("True = only tabs in the current window"),
     pinned: z.boolean().optional().describe("True = pinned tabs only, false = unpinned only"),
