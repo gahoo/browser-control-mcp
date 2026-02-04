@@ -226,6 +226,17 @@ export interface KeyPressedExtensionMessage extends ExtensionMessageBase {
 }
 
 
+export interface TabSwitchedExtensionMessage extends ExtensionMessageBase {
+  resource: "tab-switched";
+  tabId: number;
+}
+
+export interface TabGroupRenamedExtensionMessage extends ExtensionMessageBase {
+  resource: "tab-group-renamed";
+  groupId: string;
+  newTitle: string;
+}
+
 export interface RunPromptExtensionMessage extends ExtensionMessageBase {
   resource: "run-prompt-request";
   prompt: string;
@@ -259,6 +270,8 @@ export type ExtensionMessage =
   | ElementFoundExtensionMessage
   | TextTypedExtensionMessage
   | KeyPressedExtensionMessage
+  | TabSwitchedExtensionMessage
+  | TabGroupRenamedExtensionMessage
   | RunPromptExtensionMessage
   | GetServerStatusExtensionMessage;
 

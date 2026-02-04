@@ -129,6 +129,12 @@ export class MessageHandler {
       case "press-key":
         await this.pressKey(req.correlationId, req.tabId, req.key, req.selector, req.xpath, req.index);
         break;
+      case "switch-to-tab":
+        await this.switchToTab(req.correlationId, req.tabId);
+        break;
+      case "rename-tab-group":
+        await this.renameTabGroup(req.correlationId, req.groupId, req.newTitle);
+        break;
       case "run-prompt-result":
         this.handleRunPromptResult(req as RunPromptResultServerMessage); // Cast needed as req is ServerMessageRequest
         break;
@@ -865,6 +871,47 @@ export class MessageHandler {
         error: result.error,
       });
     }
+  }
+
+  private async switchToTab(
+    correlationId: string,
+    tabId: number
+  ): Promise<void> {
+    // Activate the tab (bring it to foreground)
+    await browser.tabs.update(tabId, { active: true });
+
+    // Also focus the window containing this tab
+    const tab = await browser.tabs.get(tabId);
+    if (tab.windowId !== undefined) {
+      await browser.windows.update(tab.windowId, { focused: true });
+    }
+
+    await this.client.sendResourceToServer({
+      resource: "tab-switched",
+      correlationId,
+      tabId,
+    });
+  }
+
+  private async renameTabGroup(
+    correlationId: string,
+    groupIdStr: string,
+    newTitle: string
+  ): Promise<void> {
+    // Convert string groupId to number for browser API
+    const groupId = parseInt(groupIdStr, 10);
+    if (isNaN(groupId)) {
+      throw new Error(`Invalid group ID: ${groupIdStr}`);
+    }
+
+    await browser.tabGroups.update(groupId, { title: newTitle });
+
+    await this.client.sendResourceToServer({
+      resource: "tab-group-renamed",
+      correlationId,
+      groupId: groupIdStr,
+      newTitle,
+    });
   }
 
   private async captureTab(windowId: number): Promise<string> {

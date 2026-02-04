@@ -176,6 +176,17 @@ export interface TypeTextServerMessage extends ServerMessageBase {
   index?: number;
 }
 
+export interface SwitchToTabServerMessage extends ServerMessageBase {
+  cmd: "switch-to-tab";
+  tabId: number;
+}
+
+export interface RenameTabGroupServerMessage extends ServerMessageBase {
+  cmd: "rename-tab-group";
+  groupId: string;
+  newTitle: string;
+}
+
 export interface PressKeyServerMessage extends ServerMessageBase {
   cmd: "press-key";
   tabId: number;
@@ -229,6 +240,8 @@ export type ServerMessage =
   | FindElementServerMessage
   | TypeTextServerMessage
   | PressKeyServerMessage
+  | SwitchToTabServerMessage
+  | RenameTabGroupServerMessage
   | ServerStatusServerMessage;
 
 export type ServerMessageRequest = ServerMessage & { correlationId: string };

@@ -426,6 +426,45 @@ mcpServer.tool(
 );
 
 mcpServer.tool(
+  "switch-to-tab",
+  "Switch to (activate) a specific browser tab by its tab ID. This will bring the tab to the foreground.",
+  {
+    tabId: z.number().describe("The ID of the tab to switch to"),
+  },
+  async ({ tabId }) => {
+    await browserApi.switchToTab(tabId);
+    return {
+      content: [
+        {
+          type: "text",
+          text: `Switched to tab ${tabId}`,
+        },
+      ],
+    };
+  }
+);
+
+mcpServer.tool(
+  "rename-tab-group",
+  "Rename an existing tab group by its group ID. Use get-browser-tab-groups to find existing group IDs.",
+  {
+    groupId: z.string().describe("The ID of the tab group to rename"),
+    newTitle: z.string().describe("The new title for the tab group"),
+  },
+  async ({ groupId, newTitle }) => {
+    await browserApi.renameTabGroup(groupId, newTitle);
+    return {
+      content: [
+        {
+          type: "text",
+          text: `Tab group ${groupId} renamed to "${newTitle}"`,
+        },
+      ],
+    };
+  }
+);
+
+mcpServer.tool(
   "query-open-tabs",
   `Search/filter open tabs with flexible query options. Use 'active: true, currentWindow: true' to get the current tab.
 

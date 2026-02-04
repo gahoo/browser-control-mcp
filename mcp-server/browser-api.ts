@@ -524,6 +524,23 @@ export class BrowserAPI {
     await this.waitForResponse(correlationId, "key-pressed");
   }
 
+  async switchToTab(tabId: number): Promise<void> {
+    const correlationId = this.sendMessageToExtension({
+      cmd: "switch-to-tab",
+      tabId,
+    });
+    await this.waitForResponse(correlationId, "tab-switched");
+  }
+
+  async renameTabGroup(groupId: string, newTitle: string): Promise<void> {
+    const correlationId = this.sendMessageToExtension({
+      cmd: "rename-tab-group",
+      groupId,
+      newTitle,
+    });
+    await this.waitForResponse(correlationId, "tab-group-renamed");
+  }
+
   private createSignature(payload: string): string {
     if (!this.sharedSecret) {
       throw new Error("Shared secret not initialized");

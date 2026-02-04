@@ -129,6 +129,16 @@ export const AVAILABLE_TOOLS: ToolInfo[] = [
     id: "press-key",
     name: "Press Key",
     description: "Allows the MCP server to simulate keyboard events (e.g., Enter, Tab)"
+  },
+  {
+    id: "switch-to-tab",
+    name: "Switch to Tab",
+    description: "Allows the MCP server to switch to (activate) a specific browser tab"
+  },
+  {
+    id: "rename-tab-group",
+    name: "Rename Tab Group",
+    description: "Allows the MCP server to rename an existing tab group"
   }
 ];
 
@@ -158,6 +168,8 @@ export const COMMAND_TO_TOOL_ID: Record<ServerMessageRequest["cmd"], string> = {
   "find-element": "find-element",
   "type-text": "type-text",
   "press-key": "press-key",
+  "switch-to-tab": "switch-to-tab",
+  "rename-tab-group": "rename-tab-group",
   "run-prompt-result": "internal-core", // Internal system command
   "server-status": "internal-core", // Internal system command
 };
