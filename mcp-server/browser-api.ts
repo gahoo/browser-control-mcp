@@ -541,6 +541,14 @@ export class BrowserAPI {
     await this.waitForResponse(correlationId, "tab-group-renamed");
   }
 
+  async deleteTabGroup(groupId: string): Promise<void> {
+    const correlationId = this.sendMessageToExtension({
+      cmd: "delete-tab-group",
+      groupId,
+    });
+    await this.waitForResponse(correlationId, "tab-group-deleted");
+  }
+
   private createSignature(payload: string): string {
     if (!this.sharedSecret) {
       throw new Error("Shared secret not initialized");

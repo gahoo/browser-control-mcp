@@ -188,6 +188,11 @@ export interface RenameTabGroupServerMessage extends ServerMessageBase {
   newTitle: string;
 }
 
+export interface DeleteTabGroupServerMessage extends ServerMessageBase {
+  cmd: "delete-tab-group";
+  groupId: string;
+}
+
 export interface PressKeyServerMessage extends ServerMessageBase {
   cmd: "press-key";
   tabId: number;
@@ -243,6 +248,7 @@ export type ServerMessage =
   | PressKeyServerMessage
   | SwitchToTabServerMessage
   | RenameTabGroupServerMessage
+  | DeleteTabGroupServerMessage
   | ServerStatusServerMessage;
 
 export type ServerMessageRequest = ServerMessage & { correlationId: string };

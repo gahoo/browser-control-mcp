@@ -135,6 +135,9 @@ export class MessageHandler {
       case "rename-tab-group":
         await this.renameTabGroup(req.correlationId, req.groupId, req.newTitle);
         break;
+      case "delete-tab-group":
+        await this.deleteTabGroup(req.correlationId, req.groupId);
+        break;
       case "run-prompt-result":
         this.handleRunPromptResult(req as RunPromptResultServerMessage); // Cast needed as req is ServerMessageRequest
         break;
@@ -913,6 +916,34 @@ export class MessageHandler {
       correlationId,
       groupId: groupIdStr,
       newTitle,
+    });
+  }
+
+  private async deleteTabGroup(
+    correlationId: string,
+    groupIdStr: string
+  ): Promise<void> {
+    // Convert string groupId to number for browser API
+    const groupId = parseInt(groupIdStr, 10);
+    if (isNaN(groupId)) {
+      throw new Error(`Invalid group ID: ${groupIdStr}`);
+    }
+
+    // Get all tabs in this group first, then ungroup them
+    // This effectively "deletes" the group since ungrouped tabs don't belong to any group
+    // Note: TypeScript types may not include groupId in query, but the browser API supports it
+    const tabsInGroup = await browser.tabs.query({ groupId } as any);
+    const tabIds = tabsInGroup.map(tab => tab.id).filter((id): id is number => id !== undefined);
+
+    if (tabIds.length > 0) {
+      // Ungroup all tabs in the group (this will delete the group)
+      await browser.tabs.ungroup(tabIds);
+    }
+
+    await this.client.sendResourceToServer({
+      resource: "tab-group-deleted",
+      correlationId,
+      groupId: groupIdStr,
     });
   }
 

@@ -12,6 +12,12 @@ declare namespace browser.tabs {
      * @see https://developer.mozilla.org/en-US/docs/Mozilla/Add-ons/WebExtensions/API/tabs/group
      */
     function group(options: GroupOptions): Promise<number>;
+
+    /**
+     * 取消标签页分组。
+     * @see https://developer.mozilla.org/en-US/docs/Mozilla/Add-ons/WebExtensions/API/tabs/ungroup
+     */
+    function ungroup(tabIds: number | number[]): Promise<void>;
 }
 
 declare namespace browser.tabGroups {

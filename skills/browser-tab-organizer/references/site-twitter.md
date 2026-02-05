@@ -34,7 +34,11 @@ If classified as **Resources**:
 ### 3. Knowledge Clipping & Archiving
 For high-value technical articles, opinions, or insights:
 
-1.  **Extract**: Use `get-tab-markdown-content` to fetch clean thread content.
+1.  **Extract Content**:
+    - **Basic Extraction**: Use `get-tab-markdown-content` for simple insights.
+    - **Deep Extraction (Threads/Short Posts)**: If the main post is brief or part of a thread, use `get-tab-markdown-content` with the following parameters to capture the full context and all replies:
+        - `cssSelector: "article div[data-testid='tweetText']"`
+        - `matchAll: true`
 2.  **Summarize**: Generate a structured summary.
     - **Format**: Adhere to the **`obsidian-markdown`** skill guidelines (including YAML frontmatter, tags, and callouts).
 3.  **User Review**: Present the summary and metadata to the user for approval.

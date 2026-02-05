@@ -465,6 +465,25 @@ mcpServer.tool(
 );
 
 mcpServer.tool(
+  "delete-tab-group",
+  "Delete a tab group by its group ID. The tabs in the group will be ungrouped (not closed). Use get-browser-tab-groups to find existing group IDs.",
+  {
+    groupId: z.string().describe("The ID of the tab group to delete"),
+  },
+  async ({ groupId }) => {
+    await browserApi.deleteTabGroup(groupId);
+    return {
+      content: [
+        {
+          type: "text",
+          text: `Tab group ${groupId} deleted (tabs ungrouped)`,
+        },
+      ],
+    };
+  }
+);
+
+mcpServer.tool(
   "query-open-tabs",
   `Search/filter open tabs with flexible query options. Use 'active: true, currentWindow: true' to get the current tab.
 

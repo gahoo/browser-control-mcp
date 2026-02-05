@@ -237,6 +237,11 @@ export interface TabGroupRenamedExtensionMessage extends ExtensionMessageBase {
   newTitle: string;
 }
 
+export interface TabGroupDeletedExtensionMessage extends ExtensionMessageBase {
+  resource: "tab-group-deleted";
+  groupId: string;
+}
+
 export interface RunPromptExtensionMessage extends ExtensionMessageBase {
   resource: "run-prompt-request";
   prompt: string;
@@ -272,6 +277,7 @@ export type ExtensionMessage =
   | KeyPressedExtensionMessage
   | TabSwitchedExtensionMessage
   | TabGroupRenamedExtensionMessage
+  | TabGroupDeletedExtensionMessage
   | RunPromptExtensionMessage
   | GetServerStatusExtensionMessage;
 

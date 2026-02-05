@@ -139,6 +139,11 @@ export const AVAILABLE_TOOLS: ToolInfo[] = [
     id: "rename-tab-group",
     name: "Rename Tab Group",
     description: "Allows the MCP server to rename an existing tab group"
+  },
+  {
+    id: "delete-tab-group",
+    name: "Delete Tab Group",
+    description: "Allows the MCP server to delete/ungroup a tab group"
   }
 ];
 
@@ -170,6 +175,7 @@ export const COMMAND_TO_TOOL_ID: Record<ServerMessageRequest["cmd"], string> = {
   "press-key": "press-key",
   "switch-to-tab": "switch-to-tab",
   "rename-tab-group": "rename-tab-group",
+  "delete-tab-group": "delete-tab-group",
   "run-prompt-result": "internal-core", // Internal system command
   "server-status": "internal-core", // Internal system command
 };
