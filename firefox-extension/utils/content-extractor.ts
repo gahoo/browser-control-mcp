@@ -19,6 +19,7 @@ export interface ExtractedContent {
 
 export interface ExtractOptions {
     cssSelector?: string;
+    matchAll?: boolean;
 }
 
 export function extractContent(doc: Document, url: string, options?: ExtractOptions): ExtractedContent {
@@ -26,16 +27,31 @@ export function extractContent(doc: Document, url: string, options?: ExtractOpti
 
     let targetDoc: Document = doc;
 
-    // If cssSelector is provided, create a temporary document with just the selected element
+    // If cssSelector is provided, create a temporary document with selected element(s)
     if (options?.cssSelector) {
-        const targetElement = doc.querySelector(options.cssSelector);
-        if (!targetElement) {
-            throw new Error(`No element found matching selector: ${options.cssSelector}`);
-        }
+        if (options.matchAll) {
+            // Match all elements with the selector
+            const targetElements = doc.querySelectorAll(options.cssSelector);
+            if (targetElements.length === 0) {
+                throw new Error(`No elements found matching selector: ${options.cssSelector}`);
+            }
 
-        // Create a temporary document and clone the target element into it
-        targetDoc = doc.implementation.createHTMLDocument('temp');
-        targetDoc.body.appendChild(targetElement.cloneNode(true));
+            // Create a temporary document and clone all matching elements into it
+            targetDoc = doc.implementation.createHTMLDocument('temp');
+            targetElements.forEach(el => {
+                targetDoc.body.appendChild(el.cloneNode(true));
+            });
+        } else {
+            // Default: match only the first element
+            const targetElement = doc.querySelector(options.cssSelector);
+            if (!targetElement) {
+                throw new Error(`No element found matching selector: ${options.cssSelector}`);
+            }
+
+            // Create a temporary document and clone the target element into it
+            targetDoc = doc.implementation.createHTMLDocument('temp');
+            targetDoc.body.appendChild(targetElement.cloneNode(true));
+        }
     }
 
     // Initialize Defuddle and parse

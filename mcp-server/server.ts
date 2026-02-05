@@ -742,6 +742,7 @@ mcpServer.tool(
    Markdown with metadata (author, date, etc). 
    
    Use cssSelector to extract content from a specific element instead of the entire page.
+   Set matchAll to true to match ALL elements with the selector (default: only first match).
    
    Best for: news articles, blog posts, documentation pages.
    Alternative: use 'get-tab-web-content' for raw text without formatting.`,
@@ -755,9 +756,14 @@ mcpServer.tool(
       .string()
       .optional()
       .describe("CSS selector to extract specific element (e.g., '#main-content', '.article-body')"),
+    matchAll: z
+      .boolean()
+      .optional()
+      .default(false)
+      .describe("If true with cssSelector, match all elements and concatenate content (default: false)"),
   },
-  async ({ tabId, maxLength, cssSelector }) => {
-    const result = await browserApi.getMarkdownContent(tabId, { maxLength, cssSelector });
+  async ({ tabId, maxLength, cssSelector, matchAll }) => {
+    const result = await browserApi.getMarkdownContent(tabId, { maxLength, cssSelector, matchAll });
 
     const { markdown, metadata, statistics } = result.content;
 

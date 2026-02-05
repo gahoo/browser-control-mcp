@@ -95,6 +95,7 @@ export interface GetTabMarkdownContentServerMessage extends ServerMessageBase {
   options?: {
     maxLength?: number;
     cssSelector?: string;
+    matchAll?: boolean;
   };
 }
 

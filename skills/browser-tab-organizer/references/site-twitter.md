@@ -30,3 +30,15 @@ If classified as **Resources**:
 4.  **Cleanup**:
     - If a drive link was found and opened: **CLOSE** the tweet tab (unless it contains other unique info).
     - If no link found but looks like a resource: **KEEP** in "Downloads" group.
+
+### 3. Knowledge Clipping & Archiving
+For high-value technical articles, opinions, or insights:
+
+1.  **Extract**: Use `get-tab-markdown-content` to fetch clean thread content.
+2.  **Summarize**: Generate a structured summary.
+    - **Format**: Adhere to the **`obsidian-markdown`** skill guidelines (including YAML frontmatter, tags, and callouts).
+3.  **User Review**: Present the summary and metadata to the user for approval.
+4.  **Save to Obsidian**: 
+    - Use `create-obsidian-note`.
+    - **Storage**: Save to the `Clippings/` directory (e.g., `filename: "Clippings/Note Title.md"`).
+5.  **Cleanup**: **CLOSE** the tab only AFTER the user confirms the note was created successfully.

@@ -668,7 +668,7 @@ export class MessageHandler {
   private async sendMarkdownContent(
     correlationId: string,
     tabId: number,
-    options?: { maxLength?: number; cssSelector?: string }
+    options?: { maxLength?: number; cssSelector?: string; matchAll?: boolean }
   ): Promise<void> {
     const tab = await browser.tabs.get(tabId);
     if (tab.url && (await isDomainInDenyList(tab.url))) {
@@ -678,7 +678,9 @@ export class MessageHandler {
     await this.checkForUrlPermission(tab.url);
 
     // Clear any previous result and set extraction options
-    const extractionOptions = options?.cssSelector ? { cssSelector: options.cssSelector } : undefined;
+    const extractionOptions = options?.cssSelector
+      ? { cssSelector: options.cssSelector, matchAll: options.matchAll }
+      : undefined;
 
     let result: any;
     try {
