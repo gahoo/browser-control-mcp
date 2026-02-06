@@ -96,6 +96,10 @@ export interface GetTabMarkdownContentServerMessage extends ServerMessageBase {
     maxLength?: number;
     cssSelector?: string;
     matchAll?: boolean;
+    mask?: {
+      elements: string[];                // Element tag names to mask, e.g., ['article', 'section']
+      behavior?: "replace" | "remove";   // 'replace' converts to div (default), 'remove' deletes entirely
+    };
   };
 }
 

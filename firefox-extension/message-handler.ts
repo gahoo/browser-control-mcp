@@ -671,7 +671,7 @@ export class MessageHandler {
   private async sendMarkdownContent(
     correlationId: string,
     tabId: number,
-    options?: { maxLength?: number; cssSelector?: string; matchAll?: boolean }
+    options?: { maxLength?: number; cssSelector?: string; matchAll?: boolean; mask?: { elements: string[]; behavior?: "replace" | "remove" } }
   ): Promise<void> {
     const tab = await browser.tabs.get(tabId);
     if (tab.url && (await isDomainInDenyList(tab.url))) {
@@ -681,15 +681,21 @@ export class MessageHandler {
     await this.checkForUrlPermission(tab.url);
 
     // Clear any previous result and set extraction options
-    const extractionOptions = options?.cssSelector
-      ? { cssSelector: options.cssSelector, matchAll: options.matchAll }
-      : undefined;
+    const extractionOptions: { cssSelector?: string; matchAll?: boolean; mask?: { elements: string[]; behavior?: "replace" | "remove" } } = {};
+    if (options?.cssSelector) {
+      extractionOptions.cssSelector = options.cssSelector;
+      extractionOptions.matchAll = options.matchAll;
+    }
+    if (options?.mask && options.mask.elements.length > 0) {
+      extractionOptions.mask = options.mask;
+    }
 
     let result: any;
+    const hasOptions = Object.keys(extractionOptions).length > 0;
     try {
       result = await browser.tabs.sendMessage(tabId, {
         action: "getMarkdownContent",
-        options: extractionOptions
+        options: hasOptions ? extractionOptions : undefined
       });
     } catch (error: any) {
       if (error.message.includes("Could not establish connection") || error.message.includes("receiving end does not exist")) {

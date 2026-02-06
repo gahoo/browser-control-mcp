@@ -17,9 +17,47 @@ export interface ExtractedContent {
     };
 }
 
+export interface MaskOptions {
+    elements: string[];                    // Element tag names to mask, e.g., ['article', 'section']
+    behavior?: "replace" | "remove";       // 'replace' converts to div (default), 'remove' deletes entirely
+}
+
 export interface ExtractOptions {
     cssSelector?: string;
     matchAll?: boolean;
+    mask?: MaskOptions;
+}
+
+/**
+ * Process elements according to mask options.
+ * - 'replace': Convert elements to div (preserves content, removes semantic meaning)
+ * - 'remove': Delete elements entirely (removes content)
+ */
+function applyMask(doc: Document, maskOptions: MaskOptions): void {
+    const behavior = maskOptions.behavior || 'replace';
+
+    for (const tagName of maskOptions.elements) {
+        const elements = doc.querySelectorAll(tagName);
+        elements.forEach(element => {
+            if (behavior === 'remove') {
+                // Remove the element entirely
+                element.parentNode?.removeChild(element);
+            } else {
+                // Replace with div (default)
+                const div = doc.createElement('div');
+                // Copy all attributes
+                Array.from(element.attributes).forEach(attr => {
+                    div.setAttribute(attr.name, attr.value);
+                });
+                // Copy all children
+                while (element.firstChild) {
+                    div.appendChild(element.firstChild);
+                }
+                // Replace the original element
+                element.parentNode?.replaceChild(div, element);
+            }
+        });
+    }
 }
 
 export function extractContent(doc: Document, url: string, options?: ExtractOptions): ExtractedContent {
@@ -27,7 +65,7 @@ export function extractContent(doc: Document, url: string, options?: ExtractOpti
 
     let targetDoc: Document = doc;
 
-    // If cssSelector is provided, create a temporary document with selected element(s)
+    // Step 1: If cssSelector is provided, extract the selected element(s) first
     if (options?.cssSelector) {
         if (options.matchAll) {
             // Match all elements with the selector
@@ -52,6 +90,23 @@ export function extractContent(doc: Document, url: string, options?: ExtractOpti
             targetDoc = doc.implementation.createHTMLDocument('temp');
             targetDoc.body.appendChild(targetElement.cloneNode(true));
         }
+    }
+
+    // Step 2: Apply element masking to the selected content (or full doc if no cssSelector)
+    if (options?.mask && options.mask.elements.length > 0) {
+        // If we already have a cloned targetDoc from cssSelector, use it directly
+        // Otherwise, clone the original document first
+        if (targetDoc === doc) {
+            const tempDoc = doc.implementation.createHTMLDocument('temp');
+            const clonedBody = doc.body.cloneNode(true) as HTMLElement;
+            tempDoc.body.innerHTML = '';
+            while (clonedBody.firstChild) {
+                tempDoc.body.appendChild(clonedBody.firstChild);
+            }
+            targetDoc = tempDoc;
+        }
+        // Apply masking to the target document
+        applyMask(targetDoc, options.mask);
     }
 
     // Initialize Defuddle and parse

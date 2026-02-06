@@ -763,6 +763,12 @@ mcpServer.tool(
    Use cssSelector to extract content from a specific element instead of the entire page.
    Set matchAll to true to match ALL elements with the selector (default: only first match).
    
+   Use mask to control how Defuddle handles certain elements:
+   - mask.elements: Array of tag names to process, e.g., ['article', 'section']
+   - mask.behavior: 'replace' (default) converts to <div>, 'remove' deletes entirely
+   
+   Example: { mask: { elements: ['article'], behavior: 'replace' } }
+   
    Best for: news articles, blog posts, documentation pages.
    Alternative: use 'get-tab-web-content' for raw text without formatting.`,
   {
@@ -780,9 +786,16 @@ mcpServer.tool(
       .optional()
       .default(false)
       .describe("If true with cssSelector, match all elements and concatenate content (default: false)"),
+    mask: z
+      .object({
+        elements: z.array(z.string()).describe("Element tag names to mask, e.g., ['article', 'section']"),
+        behavior: z.enum(["replace", "remove"]).optional().describe("'replace' converts to div (default), 'remove' deletes entirely"),
+      })
+      .optional()
+      .describe("Mask options to control how Defuddle handles certain elements"),
   },
-  async ({ tabId, maxLength, cssSelector, matchAll }) => {
-    const result = await browserApi.getMarkdownContent(tabId, { maxLength, cssSelector, matchAll });
+  async ({ tabId, maxLength, cssSelector, matchAll, mask }) => {
+    const result = await browserApi.getMarkdownContent(tabId, { maxLength, cssSelector, matchAll, mask });
 
     const { markdown, metadata, statistics } = result.content;
 
