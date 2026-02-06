@@ -1,7 +1,12 @@
 # Site: Twitter / X (x.com / twitter.com)
 
 ## Selectors
-- **Tweet Text**: `div[data-testid="tweetText"]`
+- **Standard Tweet Text**: `div[data-testid="tweetText"]`
+- **Clean Text (No Metadata)**: `article div[data-testid="tweetText"]`
+  - *Usage*: Use when author, date, and other metadata are NOT needed.
+  - *Limitation*: **Cannot** capture X Articles (Long-form content).
+- **Full Post/Long Article**: `article[data-testid="tweet"]`
+  - *Usage*: Capture full context including metadata. Required for X Articles.
 - **Links**: `div[data-testid="tweetText"] a`
   - Purpose: Extract external URLs (e.g., pan.quark.cn, github.com).
 
@@ -35,10 +40,13 @@ If classified as **Resources**:
 For high-value technical articles, opinions, or insights:
 
 1.  **Extract Content**:
-    - **Basic Extraction**: Use `get-tab-markdown-content` for simple insights.
-    - **Deep Extraction (Threads/Short Posts)**: If the main post is brief or part of a thread, use `get-tab-markdown-content` with the following parameters to capture the full context and all replies:
+    - **Standard Post (Simple)**: Use `get-tab-markdown-content` for quick insights.
+    - **Clean Threads (Text-only)**: To capture thread replies without author/date noise, use:
         - `cssSelector: "article div[data-testid='tweetText']"`
         - `matchAll: true`
+    - **Long-form Content / Full Context**: For X Articles or when metadata is required, use:
+        - `cssSelector: "article[data-testid='tweet']"`
+        - `matchAll: false` (for single article) or `true` (for full thread context)
 2.  **Summarize**: Generate a structured summary.
     - **Format**: Adhere to the **`obsidian-markdown`** skill guidelines (including YAML frontmatter, tags, and callouts).
 3.  **User Review**: Present the summary and metadata to the user for approval.
