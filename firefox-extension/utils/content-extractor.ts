@@ -26,6 +26,7 @@ export interface ExtractOptions {
     cssSelector?: string;
     matchAll?: boolean;
     mask?: MaskOptions;
+    useDefuddle?: boolean;  // Whether to use Defuddle for content extraction. Default: true (no cssSelector) or false (with cssSelector)
 }
 
 /**
@@ -109,26 +110,61 @@ export function extractContent(doc: Document, url: string, options?: ExtractOpti
         applyMask(targetDoc, options.mask);
     }
 
-    // Initialize Defuddle and parse
-    const defuddle = new Defuddle(targetDoc);
-    const result = defuddle.parse();
+    // Determine whether to use Defuddle:
+    // - If useDefuddle is explicitly set, use that value
+    // - If cssSelector is provided, default to NOT using Defuddle (user already targeted content)
+    // - Otherwise, always use Defuddle (need to extract main content from full page)
+    const shouldUseDefuddle = options?.useDefuddle !== undefined
+        ? options.useDefuddle
+        : !options?.cssSelector;
 
-    const endTime = performance.now();
+    if (shouldUseDefuddle) {
+        // Initialize Defuddle and parse
+        const defuddle = new Defuddle(targetDoc);
+        const result = defuddle.parse();
 
-    return {
-        cleanedHtml: result.content || '',
-        metadata: {
-            title: result.title || doc.title,
-            author: result.author,
-            description: result.description,
-            publishedDate: result.published,
-            domain: new URL(url).hostname,
-            url: url,
-            siteName: result.site,
-        },
-        statistics: {
-            wordCount: result.wordCount || 0,
-            parseTimeMs: Math.round(endTime - startTime),
-        }
-    };
+        const endTime = performance.now();
+
+        return {
+            cleanedHtml: result.content || '',
+            metadata: {
+                title: result.title || doc.title,
+                author: result.author,
+                description: result.description,
+                publishedDate: result.published,
+                domain: new URL(url).hostname,
+                url: url,
+                siteName: result.site,
+            },
+            statistics: {
+                wordCount: result.wordCount || 0,
+                parseTimeMs: Math.round(endTime - startTime),
+            }
+        };
+    } else {
+        // Without Defuddle: just return the HTML from targetDoc directly
+        const endTime = performance.now();
+        const html = targetDoc.body.innerHTML;
+
+        // Simple word count estimation
+        const textContent = targetDoc.body.textContent || '';
+        const wordCount = textContent.trim().split(/\s+/).filter(w => w.length > 0).length;
+
+        return {
+            cleanedHtml: html,
+            metadata: {
+                title: doc.title,
+                author: undefined,
+                description: undefined,
+                publishedDate: undefined,
+                domain: new URL(url).hostname,
+                url: url,
+                siteName: undefined,
+            },
+            statistics: {
+                wordCount,
+                parseTimeMs: Math.round(endTime - startTime),
+            }
+        };
+    }
 }

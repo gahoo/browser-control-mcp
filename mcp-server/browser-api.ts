@@ -231,7 +231,7 @@ export class BrowserAPI {
 
   async getMarkdownContent(
     tabId: number,
-    options?: { maxLength?: number; cssSelector?: string; matchAll?: boolean; mask?: { elements: string[]; behavior?: "replace" | "remove" } }
+    options?: { maxLength?: number; cssSelector?: string; matchAll?: boolean; mask?: { elements: string[]; behavior?: "replace" | "remove" }; useDefuddle?: boolean }
   ): Promise<MarkdownContentExtensionMessage> {
     const correlationId = this.sendMessageToExtension({
       cmd: "get-tab-markdown-content",
@@ -547,6 +547,25 @@ export class BrowserAPI {
       groupId,
     });
     await this.waitForResponse(correlationId, "tab-group-deleted");
+  }
+
+  async scrollPage(
+    tabId: number,
+    distance?: number,
+    unit?: "pixels" | "screens"
+  ): Promise<{ scrolledTo: { x: number; y: number }; pageHeight: number; viewportHeight: number }> {
+    const correlationId = this.sendMessageToExtension({
+      cmd: "scroll-page",
+      tabId,
+      distance,
+      unit,
+    });
+    const response = await this.waitForResponse(correlationId, "page-scrolled");
+    return {
+      scrolledTo: response.scrolledTo,
+      pageHeight: response.pageHeight,
+      viewportHeight: response.viewportHeight,
+    };
   }
 
   private createSignature(payload: string): string {

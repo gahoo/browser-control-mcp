@@ -100,6 +100,7 @@ export interface GetTabMarkdownContentServerMessage extends ServerMessageBase {
       elements: string[];                // Element tag names to mask, e.g., ['article', 'section']
       behavior?: "replace" | "remove";   // 'replace' converts to div (default), 'remove' deletes entirely
     };
+    useDefuddle?: boolean;               // Whether to use Defuddle. Default: true (no cssSelector) or false (with cssSelector)
   };
 }
 
@@ -206,6 +207,13 @@ export interface PressKeyServerMessage extends ServerMessageBase {
   index?: number;
 }
 
+export interface ScrollPageServerMessage extends ServerMessageBase {
+  cmd: "scroll-page";
+  tabId: number;
+  distance?: number;  // Scroll distance (positive=down, negative=up). Omit to scroll to page bottom.
+  unit?: "pixels" | "screens";  // Unit: 'pixels' or 'screens' (viewport heights, default)
+}
+
 
 
 export interface RunPromptResultServerMessage extends ServerMessageBase {
@@ -253,6 +261,7 @@ export type ServerMessage =
   | SwitchToTabServerMessage
   | RenameTabGroupServerMessage
   | DeleteTabGroupServerMessage
+  | ScrollPageServerMessage
   | ServerStatusServerMessage;
 
 export type ServerMessageRequest = ServerMessage & { correlationId: string };

@@ -763,7 +763,10 @@ mcpServer.tool(
    Use cssSelector to extract content from a specific element instead of the entire page.
    Set matchAll to true to match ALL elements with the selector (default: only first match).
    
-   Use mask to control how Defuddle handles certain elements:
+   When using cssSelector, Defuddle is automatically disabled by default (since you've 
+   already targeted the content). Use useDefuddle to override this behavior.
+   
+   Use mask to control how certain elements are handled:
    - mask.elements: Array of tag names to process, e.g., ['article', 'section']
    - mask.behavior: 'replace' (default) converts to <div>, 'remove' deletes entirely
    
@@ -792,10 +795,14 @@ mcpServer.tool(
         behavior: z.enum(["replace", "remove"]).optional().describe("'replace' converts to div (default), 'remove' deletes entirely"),
       })
       .optional()
-      .describe("Mask options to control how Defuddle handles certain elements"),
+      .describe("Mask options to control element handling"),
+    useDefuddle: z
+      .boolean()
+      .optional()
+      .describe("Whether to use Defuddle for content extraction. Default: true (no cssSelector) or false (with cssSelector). Use this to override the default behavior."),
   },
-  async ({ tabId, maxLength, cssSelector, matchAll, mask }) => {
-    const result = await browserApi.getMarkdownContent(tabId, { maxLength, cssSelector, matchAll, mask });
+  async ({ tabId, maxLength, cssSelector, matchAll, mask, useDefuddle }) => {
+    const result = await browserApi.getMarkdownContent(tabId, { maxLength, cssSelector, matchAll, mask, useDefuddle });
 
     const { markdown, metadata, statistics } = result.content;
 
@@ -821,7 +828,39 @@ mcpServer.tool(
 );
 
 mcpServer.tool(
+  "scroll-page",
+  `Scroll a web page in a browser tab.
+   
+   Use distance + unit to scroll by a specific amount:
+   - distance: Positive scrolls down, negative scrolls up
+   - unit: 'pixels' (exact pixels) or 'screens' (viewport heights, default)
+   
+   If distance is not specified, scrolls to the bottom of the page.
+   
+   Examples:
+   - Scroll down 1 screen: { distance: 1 }
+   - Scroll up 2 screens: { distance: -2 }
+   - Scroll down 500 pixels: { distance: 500, unit: "pixels" }
+   - Scroll to bottom: {} (no distance)`,
+  {
+    tabId: z.number().describe("Tab ID to scroll"),
+    distance: z.number().optional().describe("Scroll distance (positive=down, negative=up). Omit to scroll to page bottom."),
+    unit: z.enum(["pixels", "screens"]).optional().default("screens").describe("Unit for distance: 'pixels' or 'screens' (viewport heights, default)"),
+  },
+  async ({ tabId, distance, unit }) => {
+    const result = await browserApi.scrollPage(tabId, distance, unit);
+    const message = distance === undefined
+      ? `Scrolled to page bottom (y: ${result.scrolledTo.y})`
+      : `Scrolled to position y: ${result.scrolledTo.y} (page height: ${result.pageHeight}, viewport: ${result.viewportHeight})`;
+    return {
+      content: [{ type: "text", text: message }],
+    };
+  }
+);
+
+mcpServer.tool(
   "reload-browser-tab",
+
   "Reload/refresh a browser tab by tab ID. Useful for refreshing page content after changes or when content needs to be updated.",
   {
     tabId: z.number().describe("Tab ID to reload"),

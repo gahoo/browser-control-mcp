@@ -242,6 +242,13 @@ export interface TabGroupDeletedExtensionMessage extends ExtensionMessageBase {
   groupId: string;
 }
 
+export interface PageScrolledExtensionMessage extends ExtensionMessageBase {
+  resource: "page-scrolled";
+  scrolledTo: { x: number; y: number };
+  pageHeight: number;
+  viewportHeight: number;
+}
+
 export interface RunPromptExtensionMessage extends ExtensionMessageBase {
   resource: "run-prompt-request";
   prompt: string;
@@ -278,6 +285,7 @@ export type ExtensionMessage =
   | TabSwitchedExtensionMessage
   | TabGroupRenamedExtensionMessage
   | TabGroupDeletedExtensionMessage
+  | PageScrolledExtensionMessage
   | RunPromptExtensionMessage
   | GetServerStatusExtensionMessage;
 

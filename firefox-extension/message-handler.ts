@@ -138,6 +138,9 @@ export class MessageHandler {
       case "delete-tab-group":
         await this.deleteTabGroup(req.correlationId, req.groupId);
         break;
+      case "scroll-page":
+        await this.scrollPage(req.correlationId, req.tabId, req.distance, req.unit);
+        break;
       case "run-prompt-result":
         this.handleRunPromptResult(req as RunPromptResultServerMessage); // Cast needed as req is ServerMessageRequest
         break;
@@ -671,7 +674,7 @@ export class MessageHandler {
   private async sendMarkdownContent(
     correlationId: string,
     tabId: number,
-    options?: { maxLength?: number; cssSelector?: string; matchAll?: boolean; mask?: { elements: string[]; behavior?: "replace" | "remove" } }
+    options?: { maxLength?: number; cssSelector?: string; matchAll?: boolean; mask?: { elements: string[]; behavior?: "replace" | "remove" }; useDefuddle?: boolean }
   ): Promise<void> {
     const tab = await browser.tabs.get(tabId);
     if (tab.url && (await isDomainInDenyList(tab.url))) {
@@ -681,13 +684,17 @@ export class MessageHandler {
     await this.checkForUrlPermission(tab.url);
 
     // Clear any previous result and set extraction options
-    const extractionOptions: { cssSelector?: string; matchAll?: boolean; mask?: { elements: string[]; behavior?: "replace" | "remove" } } = {};
+    const extractionOptions: { cssSelector?: string; matchAll?: boolean; mask?: { elements: string[]; behavior?: "replace" | "remove" }; useDefuddle?: boolean } = {};
     if (options?.cssSelector) {
       extractionOptions.cssSelector = options.cssSelector;
       extractionOptions.matchAll = options.matchAll;
     }
     if (options?.mask && options.mask.elements.length > 0) {
       extractionOptions.mask = options.mask;
+    }
+    // Pass through useDefuddle option (explicit override or let content-extractor determine default)
+    if (options?.useDefuddle !== undefined) {
+      extractionOptions.useDefuddle = options.useDefuddle;
     }
 
     let result: any;
@@ -950,6 +957,46 @@ export class MessageHandler {
       resource: "tab-group-deleted",
       correlationId,
       groupId: groupIdStr,
+    });
+  }
+
+  private async scrollPage(
+    correlationId: string,
+    tabId: number,
+    distance?: number,
+    unit?: "pixels" | "screens"
+  ): Promise<void> {
+    const tab = await browser.tabs.get(tabId);
+    if (tab.url && (await isDomainInDenyList(tab.url))) {
+      throw new Error(`Domain in tab URL is in the deny list`);
+    }
+
+    await this.checkForUrlPermission(tab.url);
+
+    let result: any;
+    try {
+      result = await browser.tabs.sendMessage(tabId, {
+        action: "scrollPage",
+        distance,
+        unit
+      });
+    } catch (error: any) {
+      if (error.message.includes("Could not establish connection") || error.message.includes("receiving end does not exist")) {
+        throw new Error("Tab connection lost or content script not loaded. Please refresh the tab.");
+      }
+      throw error;
+    }
+
+    if (result?.error) {
+      throw new Error(result.error);
+    }
+
+    await this.client.sendResourceToServer({
+      resource: "page-scrolled",
+      correlationId,
+      scrolledTo: result.scrolledTo,
+      pageHeight: result.pageHeight,
+      viewportHeight: result.viewportHeight,
     });
   }
 

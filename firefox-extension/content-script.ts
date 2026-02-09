@@ -283,6 +283,44 @@ function getTabContent(offset?: number) {
     };
 }
 
+// Handler: Scroll Page
+function scrollPage(distance?: number, unit?: "pixels" | "screens") {
+    const viewportHeight = window.innerHeight;
+    const pageHeight = Math.max(
+        document.body.scrollHeight,
+        document.documentElement.scrollHeight
+    );
+
+    let scrollAmount: number;
+
+    if (distance === undefined) {
+        // Scroll to bottom
+        scrollAmount = pageHeight - window.scrollY;
+    } else {
+        // Calculate scroll amount based on unit
+        if (unit === "pixels") {
+            scrollAmount = distance;
+        } else {
+            // Default: screens (viewport heights)
+            scrollAmount = distance * viewportHeight;
+        }
+    }
+
+    window.scrollBy({ top: scrollAmount, behavior: "smooth" });
+
+    // Return current position (will be the final position after smooth scroll completes)
+    // Note: The scroll happens asynchronously with smooth behavior
+    return new Promise<any>((resolve) => {
+        setTimeout(() => {
+            resolve({
+                scrolledTo: { x: window.scrollX, y: window.scrollY },
+                pageHeight,
+                viewportHeight
+            });
+        }, 100);
+    });
+}
+
 
 // Main Message Listener
 browser.runtime.onMessage.addListener((message: any, sender, sendResponse) => {
@@ -321,6 +359,9 @@ browser.runtime.onMessage.addListener((message: any, sender, sendResponse) => {
                         metadata: result.metadata,
                         statistics: result.statistics
                     };
+
+                case "scrollPage":
+                    return scrollPage(message.distance, message.unit);
 
                 default:
                     // Unknown action, maybe another content script handles it or it's not for us?

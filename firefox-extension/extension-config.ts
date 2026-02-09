@@ -144,6 +144,11 @@ export const AVAILABLE_TOOLS: ToolInfo[] = [
     id: "delete-tab-group",
     name: "Delete Tab Group",
     description: "Allows the MCP server to delete/ungroup a tab group"
+  },
+  {
+    id: "scroll-page",
+    name: "Scroll Page",
+    description: "Allows the MCP server to scroll web pages up, down, or to bottom"
   }
 ];
 
@@ -176,6 +181,7 @@ export const COMMAND_TO_TOOL_ID: Record<ServerMessageRequest["cmd"], string> = {
   "switch-to-tab": "switch-to-tab",
   "rename-tab-group": "rename-tab-group",
   "delete-tab-group": "delete-tab-group",
+  "scroll-page": "scroll-page",
   "run-prompt-result": "internal-core", // Internal system command
   "server-status": "internal-core", // Internal system command
 };
