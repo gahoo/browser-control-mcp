@@ -31,9 +31,17 @@ Iterate through the filtered tabs:
   - Move to "GitHub" group.
   - Use `get-tab-markdown-content` for summaries.
 
-### 3. Final Cleanup
+### 4. Post-Group Reflection & Optimization (Conditional)
+- **Review**: After finishing a group, evaluate if the process encountered redundant steps, selector failures, new patterns, or **significant obstacles that hindered efficient organization**.
+- **Synthesize**: Formulate a more efficient path or workaround (e.g., new selectors, automated routing).
+- **Consult**: **ONLY** if a significant optimization is identified, present the findings to the user and ask for confirmation to update the Skill. If the process was smooth, proceed without interruption.
+
+### 5. Final Cleanup
 - Re-verify tab groups.
 - Close original post tabs if resources have been successfully extracted and opened.
+
+## Utilities
+- **Tab Domain Statistics**: Use [util-tab-stats.md](references/util-tab-stats.md) to analyze tab distribution across domains.
 
 ## Usage Commands
 - "Organize my tabs" -> Starts the full scan and grouping.

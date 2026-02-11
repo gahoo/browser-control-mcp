@@ -148,6 +148,8 @@ For high-value technical articles, opinions, or insights:
     - **Long Articles**: For X Articles, set `maxLength: 500000` to prevent truncation.
             - **Preservation Format**:
                 - **High-Value Long-form**: MUST include **Key Takeaways** (bullet points), **Summary** (1-2 sentences), and **Full Original Text (including ALL original images)**. Use `[[WikiLink]]` to connect related solutions.
+                    - **INTEGRITY RULE**: "Full Original Text" means **ZERO compression or omission**. You must capture from the headline down to the very last sentence.
+                    - **MANDATORY CONFIRMATION**: Before saving to Obsidian, you **MUST** present the final sentence of your captured text to the user and ask: "Is this the actual end of the article?"
                 - **Standard Tweet/Thread**: **Key Takeaways** only (plus text/images). No summary needed.    
     3. **Summarize & Tag**:
         - **Format**: Adhere to `obsidian-markdown` guidelines.
