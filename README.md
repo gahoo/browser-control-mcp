@@ -89,7 +89,7 @@ After installing the browser extension, add the following configuration to your 
                 "/path/to/repo/mcp-server/dist/server.js"
             ],
             "env": {
-                "EXTENSION_SECRET": "<secret_on_firefox_extension_options_page>",
+                "EXTENSION_SK": "<secret_on_firefox_extension_options_page>",
                 "EXTENSION_PORT": "8089",
                 "LOG_LEVEL": "info",
                 "LOG_FILE": "/path/to/mcp-server.log",
@@ -105,7 +105,7 @@ Replace `/path/to/repo` with the correct path.
 
 | Variable | Required | Description |
 |----------|----------|-------------|
-| `EXTENSION_SECRET` | Yes | Secret shown on the extension's preferences page in Firefox (`about:addons`) |
+| `EXTENSION_SK` | Yes | Secret shown on the extension's preferences page in Firefox (`about:addons`) |
 | `EXTENSION_PORT` | No | Port for MCP server ↔ extension communication (default: `8089`) |
 | `LOG_LEVEL` | No | Logging verbosity: `debug`, `info`, `warn`, `error` (default: `info`) |
 | `LOG_FILE` | No | Path to write log file (default: none, logs to stderr only) |
@@ -133,7 +133,7 @@ and use the following mcpServers configuration:
                 "--rm",
                 "-i",
                 "-p", "127.0.0.1:8089:8089",
-                "-e", "EXTENSION_SECRET=<secret_from_extension>",
+                "-e", "EXTENSION_SK=<secret_from_extension>",
                 "-e", "CONTAINERIZED=true",
                 "browser-control-mcp"
             ]

@@ -29,7 +29,7 @@
                 "${__dirname}/dist/server.js"
             ],
             "env": {
-                "EXTENSION_SECRET": "${user_config.extension_secret}",
+                "EXTENSION_SK": "${user_config.extension_secret}",
                 "EXTENSION_PORT": "${user_config.port}"
             }
         }

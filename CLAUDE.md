@@ -60,7 +60,7 @@ This is a monorepo with three main components:
 - `common/extension-messages.ts`: Messages sent from extension to server
 
 ### Authentication
-The extension generates a random secret key that must be configured in the MCP server's environment as `EXTENSION_SECRET`. The server connects to the extension on port 8089 (configurable via `EXTENSION_PORT`).
+The extension generates a random secret key that must be configured in the MCP server's environment as `EXTENSION_SK`. The server connects to the extension on port 8089 (configurable via `EXTENSION_PORT`).
 
 ### Development Notes
 - Uses esbuild for extension bundling

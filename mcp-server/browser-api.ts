@@ -61,7 +61,7 @@ export class BrowserAPI {
     const { secret, port } = readConfig();
     if (!secret) {
       throw new Error(
-        "EXTENSION_SECRET env var missing. See the extension's options page."
+        "EXTENSION_SK env var missing. See the extension's options page."
       );
     }
     this.sharedSecret = secret;
@@ -740,7 +740,7 @@ export class BrowserAPI {
 
 function readConfig() {
   return {
-    secret: process.env.EXTENSION_SECRET,
+    secret: process.env.EXTENSION_SK,
     port: process.env.EXTENSION_PORT
       ? parseInt(process.env.EXTENSION_PORT, 10)
       : WS_DEFAULT_PORT,

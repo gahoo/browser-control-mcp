@@ -21,7 +21,7 @@ COPY mcp-server/ ./
 # Build mcp-server
 RUN npm run build
 
-# Set default port (EXTENSION_SECRET should be provided at runtime)
+# Set default port (EXTENSION_SK should be provided at runtime)
 ENV EXTENSION_PORT=8089
 
 # Expose port (default WebSocket port for extension communication)
