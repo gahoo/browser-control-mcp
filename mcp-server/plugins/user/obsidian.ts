@@ -6,31 +6,58 @@ const CHUNK_DELAY_MS = 1500; // Delay between chunks to allow Obsidian to proces
 
 /**
  * Split content into chunks based on encoded length limit.
- * Ensures each chunk's encoded form doesn't exceed the limit.
+ * Prioritizes splitting at natural line breaks to avoid awkward breaks.
+ * Also trims leading newlines from subsequent chunks since Obsidian's append adds one.
  */
 function splitContentByEncodedLength(content: string, maxLen: number): string[] {
     const chunks: string[] = [];
-    let currentChunk = "";
-    let currentEncodedLen = 0;
+    let remaining = content;
 
-    for (const char of content) {
-        const encodedChar = encodeURIComponent(char);
-        const charEncodedLen = encodedChar.length;
+    while (remaining.length > 0) {
+        const encodedRemaining = encodeURIComponent(remaining);
 
-        // If adding this character would exceed the limit, start a new chunk
-        if (currentEncodedLen + charEncodedLen > maxLen && currentChunk.length > 0) {
-            chunks.push(currentChunk);
-            currentChunk = char;
-            currentEncodedLen = charEncodedLen;
-        } else {
-            currentChunk += char;
-            currentEncodedLen += charEncodedLen;
+        // If the remaining content fits, add it and we're done
+        if (encodedRemaining.length <= maxLen) {
+            chunks.push(remaining);
+            break;
         }
-    }
 
-    // Push the remaining content
-    if (currentChunk.length > 0) {
-        chunks.push(currentChunk);
+        // Find a good split point within the limit
+        let splitIndex = 0;
+        let encodedLen = 0;
+        let lastNewlineIndex = -1;
+
+        for (let i = 0; i < remaining.length; i++) {
+            const char = remaining[i];
+            const encodedChar = encodeURIComponent(char);
+
+            if (encodedLen + encodedChar.length > maxLen) {
+                break;
+            }
+
+            encodedLen += encodedChar.length;
+            splitIndex = i + 1;
+
+            // Track the last newline position for natural splitting
+            if (char === '\n') {
+                lastNewlineIndex = i + 1;
+            }
+        }
+
+        // Prefer splitting at a newline if we found one in the last 20% of the chunk
+        // This ensures we use natural breaks when available
+        const minNewlinePosition = Math.floor(splitIndex * 0.8);
+        if (lastNewlineIndex > minNewlinePosition) {
+            splitIndex = lastNewlineIndex;
+        }
+
+        chunks.push(remaining.substring(0, splitIndex));
+        remaining = remaining.substring(splitIndex);
+
+        // Trim leading newline from subsequent chunks since Obsidian's append adds one
+        if (chunks.length > 0 && remaining.startsWith('\n')) {
+            remaining = remaining.substring(1);
+        }
     }
 
     return chunks;
