@@ -552,13 +552,15 @@ export class BrowserAPI {
   async scrollPage(
     tabId: number,
     distance?: number,
-    unit?: "pixels" | "screens"
+    unit?: "pixels" | "screens",
+    selector?: string
   ): Promise<{ scrolledTo: { x: number; y: number }; pageHeight: number; viewportHeight: number }> {
     const correlationId = this.sendMessageToExtension({
       cmd: "scroll-page",
       tabId,
       distance,
       unit,
+      selector,
     });
     const response = await this.waitForResponse(correlationId, "page-scrolled");
     return {

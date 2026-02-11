@@ -139,7 +139,7 @@ export class MessageHandler {
         await this.deleteTabGroup(req.correlationId, req.groupId);
         break;
       case "scroll-page":
-        await this.scrollPage(req.correlationId, req.tabId, req.distance, req.unit);
+        await this.scrollPage(req.correlationId, req.tabId, req.distance, req.unit, req.selector);
         break;
       case "run-prompt-result":
         this.handleRunPromptResult(req as RunPromptResultServerMessage); // Cast needed as req is ServerMessageRequest
@@ -964,7 +964,8 @@ export class MessageHandler {
     correlationId: string,
     tabId: number,
     distance?: number,
-    unit?: "pixels" | "screens"
+    unit?: "pixels" | "screens",
+    selector?: string
   ): Promise<void> {
     const tab = await browser.tabs.get(tabId);
     if (tab.url && (await isDomainInDenyList(tab.url))) {
@@ -978,7 +979,8 @@ export class MessageHandler {
       result = await browser.tabs.sendMessage(tabId, {
         action: "scrollPage",
         distance,
-        unit
+        unit,
+        selector
       });
     } catch (error: any) {
       if (error.message.includes("Could not establish connection") || error.message.includes("receiving end does not exist")) {

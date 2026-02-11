@@ -835,23 +835,33 @@ mcpServer.tool(
    - distance: Positive scrolls down, negative scrolls up
    - unit: 'pixels' (exact pixels) or 'screens' (viewport heights, default)
    
-   If distance is not specified, scrolls to the bottom of the page.
+   Use selector to scroll to a specific element:
+   - selector: CSS selector of the target element (distance/unit are ignored when selector is provided)
+   
+   If neither distance nor selector is specified, scrolls to the bottom of the page.
    
    Examples:
    - Scroll down 1 screen: { distance: 1 }
    - Scroll up 2 screens: { distance: -2 }
    - Scroll down 500 pixels: { distance: 500, unit: "pixels" }
-   - Scroll to bottom: {} (no distance)`,
+   - Scroll to bottom: {} (no distance)
+   - Scroll to element: { selector: "#footer" }`,
   {
     tabId: z.number().describe("Tab ID to scroll"),
     distance: z.number().optional().describe("Scroll distance (positive=down, negative=up). Omit to scroll to page bottom."),
     unit: z.enum(["pixels", "screens"]).optional().default("screens").describe("Unit for distance: 'pixels' or 'screens' (viewport heights, default)"),
+    selector: z.string().optional().describe("CSS selector of element to scroll to. When provided, distance/unit are ignored."),
   },
-  async ({ tabId, distance, unit }) => {
-    const result = await browserApi.scrollPage(tabId, distance, unit);
-    const message = distance === undefined
-      ? `Scrolled to page bottom (y: ${result.scrolledTo.y})`
-      : `Scrolled to position y: ${result.scrolledTo.y} (page height: ${result.pageHeight}, viewport: ${result.viewportHeight})`;
+  async ({ tabId, distance, unit, selector }) => {
+    const result = await browserApi.scrollPage(tabId, distance, unit, selector);
+    let message: string;
+    if (selector) {
+      message = `Scrolled to element "${selector}" (y: ${result.scrolledTo.y})`;
+    } else if (distance === undefined) {
+      message = `Scrolled to page bottom (y: ${result.scrolledTo.y})`;
+    } else {
+      message = `Scrolled to position y: ${result.scrolledTo.y} (page height: ${result.pageHeight}, viewport: ${result.viewportHeight})`;
+    }
     return {
       content: [{ type: "text", text: message }],
     };

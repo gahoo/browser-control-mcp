@@ -212,6 +212,7 @@ export interface ScrollPageServerMessage extends ServerMessageBase {
   tabId: number;
   distance?: number;  // Scroll distance (positive=down, negative=up). Omit to scroll to page bottom.
   unit?: "pixels" | "screens";  // Unit: 'pixels' or 'screens' (viewport heights, default)
+  selector?: string;  // CSS selector to scroll to. When provided, distance/unit are ignored.
 }
 
 

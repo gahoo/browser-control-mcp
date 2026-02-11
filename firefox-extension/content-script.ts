@@ -284,12 +284,30 @@ function getTabContent(offset?: number) {
 }
 
 // Handler: Scroll Page
-function scrollPage(distance?: number, unit?: "pixels" | "screens") {
+function scrollPage(distance?: number, unit?: "pixels" | "screens", selector?: string) {
     const viewportHeight = window.innerHeight;
     const pageHeight = Math.max(
         document.body.scrollHeight,
         document.documentElement.scrollHeight
     );
+
+    // Scroll to element if selector is provided
+    if (selector) {
+        const element = document.querySelector(selector);
+        if (!element) {
+            return Promise.resolve({ error: `Element not found: ${selector}` });
+        }
+        element.scrollIntoView({ behavior: "smooth", block: "start" });
+        return new Promise<any>((resolve) => {
+            setTimeout(() => {
+                resolve({
+                    scrolledTo: { x: window.scrollX, y: window.scrollY },
+                    pageHeight,
+                    viewportHeight
+                });
+            }, 100);
+        });
+    }
 
     let scrollAmount: number;
 
@@ -361,7 +379,7 @@ browser.runtime.onMessage.addListener((message: any, sender, sendResponse) => {
                     };
 
                 case "scrollPage":
-                    return scrollPage(message.distance, message.unit);
+                    return scrollPage(message.distance, message.unit, message.selector);
 
                 default:
                     // Unknown action, maybe another content script handles it or it's not for us?
