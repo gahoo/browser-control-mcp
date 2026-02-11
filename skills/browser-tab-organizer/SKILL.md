@@ -11,14 +11,15 @@ This skill automates the classification, grouping, and resource saving of browse
 
 ### 1. Discovery & Grouping
 - **Scan**: List all open tabs (`get-list-of-open-tabs`).
-- **Initial Categorization**:
-  - **Quark**: Tabs matching `pan.quark.cn`.
-  - **GitHub**: Tabs matching `github.com`.
-  - **Twitter/X**: Tabs matching `x.com` or `twitter.com`.
-- **Deduplication**: Identify tabs with identical URLs and **CLOSE** duplicates (keep the one with the smallest ID).
+- **Grouping**: Categorize tabs into groups based on domain (Quark, GitHub, Twitter, WeChat, etc.).
+- **Deduplication**: Close duplicate URLs (keep smallest ID).
 
-### 2. Domain-Specific Processing
-Iterate through open tabs and delegate to reference guides based on the URL:
+### 2. Group-Level Value Assessment
+- **Analyze**: Within each group, review titles and brief context.
+- **Filter**: Present high-value candidates to the user. **CLOSE** low-value or redundant tabs only after confirmation.
+
+### 3. Domain-Specific Processing
+Iterate through the filtered tabs:
 
 - **Twitter/X**: Load [site-twitter.md](references/site-twitter.md).
   - Classify into News, Tech, or Resources.

@@ -1,5 +1,8 @@
 # Site: Twitter / X (x.com / twitter.com)
 
+## Pre-processing & Redirection
+- **MediaViewer Handling**: Before processing any Twitter tab, check if the URL contains `/mediaViewer`. If found, redirect the tab to the original status page (e.g., `https://x.com/user/status/12345`) to ensure full context and thread visibility.
+
 ## Selectors
 - **Standard Tweet Text**: `div[data-testid="tweetText"]`
 - **Clean Text (No Metadata)**: `article div[data-testid="tweetText"]`
@@ -17,6 +20,43 @@
     2. Open in **GitHub** tab group.
     3. **CLOSE** the original tweet tab.
 
+## Resource Discovery & Enrichment
+- **Top-Down Priority**: Core value is usually at the top. Perform initial extraction first.
+- **On-demand Scrolling**: Only scroll down to expand threads or click "Show More" if content is clearly truncated or key links are mentioned as being in the "replies".
+- **Deep Search (Enrichment)**: If a tool/topic is high-value but the post has very little text (e.g., image-only):
+    1. Inform the user that information is sparse.
+    2. **ASK FOR PERMISSION** before using `google_web_search` to enrich the note.
+- **Resource Routing**:
+    - **Drive Links (Quark/Baidu)**: Open in their respective browser tab groups.
+    - **Direct Resources (PDF/Epub/etc.)**: 
+        1. **SKIP** opening a browser tab.
+        2. Identify the resource title from the tweet (Must be **highly descriptive** and meaningful).
+        3. Use `fetch-url` with a descriptive `savePath` (e.g., `savePath: "/Volumes/RamDisk/Full_Book_Title_Author.pdf"`) to download immediately.
+
+## Video & Media Handling
+### 1. Video Extraction Workflow
+- **Interceptor**: Use `install-media-interceptor` with `autoReload: true` to reliably capture the source URL.
+- **Domain Migration**: ALWAYS replace `video.twimg.com` and `pbs.twimg.com` with `twimg.42bio.info`.
+- **HTML Formatting**:
+  ```html
+  <video controls>
+      <source src="https://twimg.42bio.info/..." type="video/mp4" />
+  </video>
+  ```
+- **Spacing**: In Markdown, ensure there is exactly **one empty line** between the text content and the `<video>` element.
+
+### 2. Video Deep Dive Workflow (For High-Value Videos)
+If a video requires deep analysis (e.g., lectures, talks):
+1. **Acquire Link**: Use the **Video Extraction Workflow** above to get the `twimg.42bio.info` URL.
+2. **Download**: Use `run_shell_command` with `wget` to download the video to a temp path (e.g., `/Volumes/RamDisk/video.mp4`).
+3. **Transcribe (WhisperX)**:
+   - **Crucial**: Unset proxies first (`http_proxy="" https_proxy=""`).
+   - **Command**: 
+     - Chinese: `lang=zh model=XA9/Belle-faster-whisper-large-v3-zh-punct whisperx <file>`
+     - English: `lang=en model=large-v3 whisperx <file>`
+4. **Summarize**: Read the generated `.srt` file (use `cat` if outside workspace) and summarize key insights.
+5. **Preservation**: Save as an Obsidian note. Video notes are exempt from strict 'Key Takeaways/Summary' structures; direct synthesized summaries are preferred.
+
 ## Image Handling
 - **Domain Migration**: Replace all `pbs.twimg.com` domains with `twimg.42bio.info` for stability.
 - **Format**: Use clean Markdown `![图像](url)`.
@@ -25,19 +65,37 @@
 ## Workflow: Classification & Extraction
 
 ### 1. Classification (Taxonomy)
-Analyze the tweet text and grouped links to categorize the tab:
+Analyze the tweet text and grouped links to categorize the tab. 
+> [!TIP] Dynamic Re-evaluation
+> Even if a tab is already grouped (e.g., in "Social/News"), if its content is identified as a tutorial, tool list, or technical guide, move it to **"Tech & Tools"** immediately.
 
 - **Category: Resources (Downloads)**
   - **Keywords**: *PDF, Drive, Pan, Download, 资源, 网盘, 夸克, 阿里云, 提取码*
   - **Action**: Extract links -> Open in new tabs -> Move original tweet to "Downloads" group (or close if link extracted successfully).
 
 - **Category: Tech & Tools**
-  - **Keywords**: *GitHub, AI, LLM, Code, Tutorial, Python, Rust, Framework, Library, 教程, 源码*
+  - **Keywords**: *AI, LLM, Code, Tutorial, Python, Rust, Framework, Library, 教程, 源码*
   - **Action**: Group into "Tech & Tools".
 
+- **Category: Academic**
+  - **Keywords**: *Paper, Journal, Research, Bioinformatics, Dataset, Visualization Toolkit, 论文, 学术, 生信*
+  - **Action**: 
+    1. Extract original literature/paper links.
+    2. **Link Discovery Priority**:
+       - Priority 1: Use `get-tab-markdown-content` on the full thread.
+       - Priority 2: Use `get-clickable-elements` as fallback.
+    3. **Open & Group**: Open found paper links in the **"Papers"** tab group.
+    4. Group original tweet into "Academic".
+
 - **Category: Social / News**
-  - **Keywords**: *Breaking, News, Politics, Economy, Market, 突发, 新闻, 经济*
-  - **Action**: Group into "Social/News".
+  - **Keywords**: *Breaking, News, Politics, Economy, Market, 突发, 新闻, 经济, 视频*
+  - **Action**: 
+    1. Group into "Social/News".
+    2. **Sharing (Pastebin)**: If sharing is required:
+       - Extract text via `get-tab-markdown-content`.
+       - Extract video via the **Video Workflow** below.
+       - Use `save-to-pastebin` for each tweet (include original URL + text + empty line + `<video>`).
+       - **Master Indexing**: After batch processing, you MUST create a final Pastebin note indexing and categorizing all shared links.
 
 ### 2. Link Extraction (Resource Mode)
 If classified as **Resources**:
