@@ -8,6 +8,8 @@
 - **Clean Text (No Metadata)**: `article div[data-testid="tweetText"]`
   - *Usage*: Use when author, date, and other metadata are NOT needed.
   - *Efficient Thread Capture*: Use with `matchAll: true` to efficiently capture the main tweet AND all visible replies (often containing direct links or further details) in a single call.
+- **High Readability Composite**: `[data-testid="tweetPhoto"], [data-testid="tweetText"], [data-testid^="card.wrapper"]`
+  - *Status*: **Best for clean knowledge notes.** An enhanced version of "Clean Text" that includes images and link cards while filtering out UI noise.
 - **X Article (Long-form) & High Reliability**: `div[data-contents="true"] > *`
   - *Status*: **Best choice for X Articles.**
   - *Usage*: Use with `matchAll: true`. Often captures text that other selectors miss.
@@ -22,7 +24,15 @@
 
 ## Resource Discovery & Enrichment
 - **Top-Down Priority**: Core value is usually at the top. Perform initial extraction first.
-- **On-demand Scrolling**: Only scroll down to expand threads or click "Show More" if content is clearly truncated or key links are mentioned as being in the "replies".
+- **Advanced Thread Scraper (Anchor-Jump)**:
+    - **Extraction Selector**: Use `[data-testid="tweet"]` to capture text, links, and cards.
+    - **Anchor Selector**: Use `div[data-testid="cellInnerDiv"]:last-of-type` to jump to the current end of the rendered list.
+    - **Workflow**:
+        1. Perform initial extraction.
+        2. If logically incomplete, `scroll-page` to the **Anchor Selector**.
+        3. **MANDATORY**: After jumping, check for and click all `显示更多` (Show More) buttons (`button[data-testid="tweet-text-show-more-link"]`).
+        4. Re-extract and merge.
+    - **Smart Termination**: STOP scrolling once the promised items (e.g., "10 papers", "the list follows") are captured. Do not waste tokens on unrelated comments.
 - **Deep Search (Enrichment)**: If a tool/topic is high-value but the post has very little text (e.g., image-only):
     1. Inform the user that information is sparse.
     2. **ASK FOR PERMISSION** before using `google_web_search` to enrich the note.
@@ -82,10 +92,11 @@ Analyze the tweet text and grouped links to categorize the tab.
   - **Action**: 
     1. Extract original literature/paper links.
     2. **Link Discovery Priority**:
-       - Priority 1: Use `get-tab-markdown-content` on the full thread.
+       - Priority 1: Use `get-tab-markdown-content` with the **High Readability Composite** selector on the full thread.
        - Priority 2: Use `get-clickable-elements` as fallback.
     3. **Open & Group**: Open found paper links in the **"Papers"** tab group.
-    4. Group original tweet into "Academic".
+    4. **Archival**: ASK the user if they would like to save the tweet's context/summary as an Obsidian note.
+    5. Group original tweet into "Academic".
 
 - **Category: Social / News**
   - **Keywords**: *Breaking, News, Politics, Economy, Market, 突发, 新闻, 经济, 视频*
@@ -121,8 +132,8 @@ For high-value technical articles, opinions, or insights:
     - **Primary Tool**: **MUST** use `get-tab-markdown-content` for all knowledge extraction.
     - **Selector Hierarchy & Retries**:
         1.  **X Articles**: Start with `div[data-contents="true"]` + `matchAll: true`.
-        2.  **Standard/Threads**: Use `article div[data-testid="tweetText"]` + `matchAll: true` to capture main content and critical replies.
-        3.  **Fallback**: Use `article[data-testid="tweet"]` if metadata or broader context is needed.
+        2.  **Standard/Threads**: Use **High Readability Composite** (`[data-testid="tweetPhoto"], [data-testid="tweetText"], [data-testid^="card.wrapper"]`) + `matchAll: true` to capture core content without UI noise.
+        3.  **Fallback**: Use `article div[data-testid="tweetText"]` or `article[data-testid="tweet"]` if the composite selector fails or more metadata is needed.
     - **Failure Recovery Protocol**:
         - **Connection Errors**: If "Tab connection lost" or "content script not loaded" occurs:
             1.  Execute `reload-browser-tab`.
