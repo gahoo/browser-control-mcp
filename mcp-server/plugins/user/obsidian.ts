@@ -106,8 +106,39 @@ export default definePlugin({
                 overwrite: z.boolean().optional().describe("Whether to overwrite if the file exists."),
                 append: z.boolean().optional().describe("Whether to append if the file exists (create if not)."),
                 autoClose: z.boolean().optional().default(true).describe("Whether to auto-close the browser tab after triggering Obsidian. Set to false if you need to grant permissions on first use."),
+                directExtractOptions: z.object({
+                    tabId: z.number().describe("The ID of the tab to extract content from."),
+                    maxLength: z.number().optional().describe("Max content length (default: 100000)"),
+                    cssSelector: z.string().optional().describe("CSS selector to extract specific element (e.g., '#main-content', '.article-body')"),
+                    matchAll: z.boolean().optional().default(false).describe("If true with cssSelector, match all elements and concatenate content (default: false)"),
+                    mask: z.object({
+                        elements: z.array(z.string()).describe("Array of tag names to process"),
+                        behavior: z.enum(["replace", "remove"]).optional().default("replace").describe("Behavior for masked elements")
+                    }).optional().describe("Mask options for handling specific elements"),
+                    useDefuddle: z.boolean().optional().describe("Whether to use Defuddle for content extraction (default: true unless cssSelector is provided)"),
+                    frontmatter: z.string().optional().describe("YAML frontmatter or other metadata string to prepend to the content.")
+                }).optional().describe("Options for directly extracting content from a browser tab. If 'content' is not provided, this will be used."),
             }),
-            handler: async ({ vault, filename, content, overwrite, append, autoClose }, ctx) => {
+            handler: async ({ vault, filename, content, overwrite, append, autoClose, directExtractOptions }, ctx) => {
+                // If content is not provided but directExtractOptions is, fetch it from the browser
+                if ((!content || content.trim() === "") && directExtractOptions) {
+                    try {
+                        const { tabId, frontmatter, ...options } = directExtractOptions;
+                        ctx.logger.info(`Fetching markdown content from tab ${tabId} for Obsidian note...`);
+                        const result = await ctx.browserApi.getMarkdownContent(tabId, options);
+                        content = result.content.markdown;
+
+                        if (frontmatter) {
+                            content = `${frontmatter}\n\n${content}`;
+                        }
+                    } catch (error) {
+                        ctx.logger.error(`Failed to fetch markdown content: ${String(error)}`);
+                        return {
+                            content: [{ type: "text", text: `Error fetching content from tab: ${String(error)}`, isError: true }]
+                        };
+                    }
+                }
+
                 // Check if content needs chunking
                 const encodedContentLength = content ? encodeURIComponent(content).length : 0;
                 const needsChunking = encodedContentLength > MAX_ENCODED_LENGTH;
