@@ -612,10 +612,17 @@ Dump:
     batch_size: z.number().int().min(1).max(1000).optional().describe("Maximum number of elements to return (1-1000)"),
     last_index: z.number().int().optional().describe("Return elements with index greater than this (cursor)"),
     fields: z.array(z.enum(["index", "tag", "text", "href", "selector", "xpath"])).optional().describe("Fields to include in output"),
+    filter: z.object({
+      text: z.string().optional().describe("Filter by text content (case-insensitive substring)"),
+      href: z.string().optional().describe("Filter by href URL (case-insensitive substring)"),
+      visibleOnly: z.boolean().default(true).describe("Filter by visibility (default: true)"),
+      matchType: z.enum(["substring", "regex", "exact"]).default("substring").describe("Matching logic for text/href/attributes"),
+      attributes: z.record(z.string()).optional().describe("Map of attribute names to values to filter by (e.g. {'aria-label': 'menu', 'data-testid': 'submit-btn'})")
+    }).optional().describe("Advanced filtering options"),
     dump: z.string().optional().describe("Save results to file at this path"),
   },
-  async ({ tabId, selector, batch_size, last_index, fields, dump }) => {
-    let elements = await browserApi.getClickableElements(tabId, selector);
+  async ({ tabId, selector, batch_size, last_index, fields, filter, dump }) => {
+    let elements = await browserApi.getClickableElements(tabId, selector, filter);
     const totalElements = elements.length;
 
     // Apply cursor-based pagination
@@ -1281,9 +1288,16 @@ Output:
     query: z.string().describe("The search query (selector, xpath, text, or regex pattern)"),
     mode: z.enum(["css", "xpath", "text", "regexp"]).default("css").describe("The search mode: 'css' (selector), 'xpath', 'text' (substring match), or 'regexp' (regular expression)"),
     fields: z.array(z.enum(["index", "tagName", "text", "html", "selector", "xpath"])).optional().describe("Fields to include in output"),
+    filter: z.object({
+      text: z.string().optional().describe("Filter by text content (case-insensitive substring)"),
+      href: z.string().optional().describe("Filter by href URL (case-insensitive substring)"),
+      visibleOnly: z.boolean().default(true).describe("Filter by visibility (default: true)"),
+      matchType: z.enum(["substring", "regex", "exact"]).default("substring").describe("Matching logic for text/href/attributes"),
+      attributes: z.record(z.string()).optional().describe("Map of attribute names to values to filter by (e.g. {'aria-label': 'menu', 'data-testid': 'submit-btn'})")
+    }).optional().describe("Advanced filtering options"),
   },
-  async ({ tabId, query, mode, fields }) => {
-    const elements = await browserApi.findElement(tabId, query, mode);
+  async ({ tabId, query, mode, fields, filter }) => {
+    const elements = await browserApi.findElement(tabId, query, mode, filter);
 
     if (elements.length === 0) {
       return {

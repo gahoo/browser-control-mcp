@@ -88,9 +88,19 @@ export interface ClickableElement {
   xpath: string;
 }
 
+export interface ElementFilter {
+  text?: string;
+  href?: string;
+  isVisible?: boolean;
+  matchType?: 'substring' | 'regex' | 'exact';
+  attributes?: Record<string, string>;
+}
+
 export interface ClickableElementsExtensionMessage extends ExtensionMessageBase {
   resource: "clickable-elements";
   tabId: number;
+  selector?: string;
+  filter?: ElementFilter;
   elements: ClickableElement[];
 }
 

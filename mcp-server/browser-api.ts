@@ -319,12 +319,14 @@ export class BrowserAPI {
 
   async getClickableElements(
     tabId: number,
-    selector?: string
+    selector?: string,
+    filter?: any
   ): Promise<ClickableElement[]> {
     const correlationId = this.sendMessageToExtension({
       cmd: "get-clickable-elements",
       tabId,
       selector,
+      filter,
     });
     const message = await this.waitForResponse(correlationId, "clickable-elements");
     return message.elements;
@@ -480,13 +482,15 @@ export class BrowserAPI {
   async findElement(
     tabId: number,
     query: string,
-    mode: "css" | "xpath" | "text" | "regexp"
+    mode: "css" | "xpath" | "text" | "regexp",
+    filter?: any
   ): Promise<FoundElement[]> {
     const correlationId = this.sendMessageToExtension({
       cmd: "find-element",
       tabId,
       query,
       mode,
+      filter,
     });
     const message = await this.waitForResponse(correlationId, "element-found");
     return message.elements;

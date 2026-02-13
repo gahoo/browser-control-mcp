@@ -1,3 +1,5 @@
+import { ElementFilter } from "./extension-messages";
+
 export interface ServerMessageBase {
   cmd: string;
 }
@@ -71,6 +73,7 @@ export interface GetClickableElementsServerMessage extends ServerMessageBase {
   cmd: "get-clickable-elements";
   tabId: number;
   selector?: string;
+  filter?: ElementFilter;
 }
 
 export interface ClickElementServerMessage extends ServerMessageBase {
@@ -171,6 +174,7 @@ export interface FindElementServerMessage extends ServerMessageBase {
   tabId: number;
   query: string;
   mode: "css" | "xpath" | "text" | "regexp";
+  filter?: ElementFilter;
 }
 
 export interface TypeTextServerMessage extends ServerMessageBase {

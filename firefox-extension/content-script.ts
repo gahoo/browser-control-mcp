@@ -51,13 +51,106 @@ function isVisible(el: HTMLElement): boolean {
     return !!(el.offsetWidth || el.offsetHeight || el.getClientRects().length);
 }
 
+// Helper: Filter elements
+interface ElementFilter {
+    text?: string;
+    href?: string;
+    isVisible?: boolean;
+    matchType?: 'substring' | 'regex' | 'exact';
+    attributes?: Record<string, string>;
+}
+
+function filterElements(elements: HTMLElement[], filter?: ElementFilter): HTMLElement[] {
+    if (!filter) return elements;
+
+    return elements.filter(el => {
+        // Visibility check
+        if (filter.isVisible !== undefined) { // Check against undefined because default is true in schema but might be undefined here
+            // However, schema default logic happens on server. Here we receive what server sends.
+            // If server sends undefined, it means user didn't specify. Zod default applies before sending?
+            // Yes, Zod applies defaults. So we should expect a boolean.
+            // But let's be safe.
+            const visible = isVisible(el);
+            // Logic: if filter.isVisible is true, we want visible elements.
+            // If filter.visibleOnly (renamed in server) is true... wait, server used `visibleOnly` but here I used `isVisible`.
+            // I need to align them. Server sends `visibleOnly`. Extension interface says `isVisible`.
+            // Let's check `extension-messages.ts`. It says `isVisible`.
+            // Server mapping: `server.ts` -> `browser-api.ts` -> `extension-messages.ts`.
+            // In `server.ts` I renamed it to `visibleOnly` but `browser-api.ts` passes `filter` object directly.
+            // This means `browser-api.ts` passes `{ visibleOnly: ... }` to extension.
+            // But extension expects `{ isVisible: ... }`.
+            // CRITICAL: arguments mismatch. I must fix `browser-api.ts` to map `visibleOnly` to `isVisible` OR update extension to use `visibleOnly`.
+            // Updating extension to use `visibleOnly` seems cleaner as it matches server tool definition.
+        }
+
+        // Let's stick to the plan: implement attributes logic. I will fix the `isVisible` vs `visibleOnly` discrepancy in a separate step or just handle both here.
+        // Actually, looking at previous step 104, I renamed `isVisible` to `visibleOnly` in `server.ts`.
+        // `browser-api.ts` passes the filter object AS IS.
+        // So the object arriving here will have `visibleOnly`.
+        // I should update `ElementFilter` interface here and logic to use `visibleOnly`.
+
+        // Visibility check (handling both for backward compat if needed, but we are rewriting)
+        const outputVisible = filter.isVisible ?? (filter as any).visibleOnly;
+        if (outputVisible !== undefined) {
+            const visible = isVisible(el);
+            if (outputVisible && !visible) return false;
+            if (!outputVisible && visible) return false;
+        }
+
+        // Text check
+        if (filter.text) {
+            const text = (el.textContent || '').trim();
+            if (filter.matchType === 'regex') {
+                if (!new RegExp(filter.text, 'i').test(text)) return false;
+            } else if (filter.matchType === 'exact') {
+                if (text !== filter.text) return false;
+            } else {
+                // substring (default)
+                if (!text.toLowerCase().includes(filter.text.toLowerCase())) return false;
+            }
+        }
+
+        // Href check
+        if (filter.href) {
+            const href = (el as HTMLAnchorElement).href || '';
+            if (filter.matchType === 'regex') {
+                if (!new RegExp(filter.href, 'i').test(href)) return false;
+            } else if (filter.matchType === 'exact') {
+                if (href !== filter.href) return false;
+            } else {
+                // substring (default)
+                if (!href.toLowerCase().includes(filter.href.toLowerCase())) return false;
+            }
+        }
+
+        // Arguments (Attributes) check
+        if (filter.attributes) {
+            for (const [key, value] of Object.entries(filter.attributes)) {
+                const attrValue = el.getAttribute(key) || '';
+                if (filter.matchType === 'regex') {
+                    if (!new RegExp(value, 'i').test(attrValue)) return false;
+                } else if (filter.matchType === 'exact') {
+                    if (attrValue !== value) return false;
+                } else {
+                    // substring (default)
+                    if (!attrValue.toLowerCase().includes(value.toLowerCase())) return false;
+                }
+            }
+        }
+
+        return true;
+    });
+}
+
 // Handler: Get Clickable Elements
-function getClickableElements(selectorFilter?: string) {
+function getClickableElements(selectorFilter?: string, filter?: ElementFilter) {
     const clickableSelectors = 'a[href], button, input[type="button"], input[type="submit"], [role="button"], [onclick]';
     const selector = selectorFilter ? selectorFilter + ', ' + selectorFilter + ' ' + clickableSelectors : clickableSelectors;
-    const elements = document.querySelectorAll(selectorFilter || clickableSelectors);
+    const rawElements = Array.from(document.querySelectorAll(selectorFilter || clickableSelectors)) as HTMLElement[];
 
-    return Array.from(elements).map((el, index) => ({
+    const filteredElements = filterElements(rawElements, filter);
+
+    return filteredElements.map((el, index) => ({
         index,
         tagName: el.tagName.toLowerCase(),
         textContent: (el.textContent || '').trim().substring(0, 100),
@@ -116,8 +209,8 @@ function clickElement(payload: { textContent?: string, selector?: string, xpath?
 }
 
 // Handler: Find Element
-function findElement(payload: { query: string, mode: "css" | "xpath" | "text" | "regexp" }) {
-    const { query, mode } = payload;
+function findElement(payload: { query: string, mode: "css" | "xpath" | "text" | "regexp", filter?: ElementFilter }) {
+    const { query, mode, filter } = payload;
     let elements: Node[] = [];
 
     try {
@@ -152,7 +245,10 @@ function findElement(payload: { query: string, mode: "css" | "xpath" | "text" | 
         // ignore invalid selectors
     }
 
-    const limitedElements = elements.slice(0, 100);
+    // Apply filters
+    const filteredElements = filterElements(elements as HTMLElement[], filter);
+
+    const limitedElements = filteredElements.slice(0, 100);
     return limitedElements.map((el, index) => ({
         index,
         tagName: (el as HTMLElement).tagName?.toLowerCase() || '',
@@ -350,7 +446,7 @@ browser.runtime.onMessage.addListener((message: any, sender, sendResponse) => {
         try {
             switch (message.action) {
                 case "getClickableElements":
-                    return getClickableElements(message.selector);
+                    return getClickableElements(message.selector, message.filter);
 
                 case "clickElement":
                     return clickElement(message);
