@@ -290,10 +290,42 @@ mcpServer.tool(
   `
     Get the full text content of the webpage and the list of links in the webpage, by tab ID. 
     Use "offset" only for larger documents when the first call was truncated and if you require more content in order to assist the user.
+    
+    Options:
+    - rawHtml: If true, return raw HTML (document.body.innerHTML) instead of plain text. Default: false.
+    - dump: Save content to file. When dump is set, rawHtml defaults to true (HTML output).
   `,
-  { tabId: z.number(), offset: z.number().default(0) },
-  async ({ tabId, offset }) => {
-    const content = await browserApi.getTabContent(tabId, offset);
+  {
+    tabId: z.number(),
+    offset: z.number().default(0),
+    rawHtml: z.boolean().optional().describe("If true, return raw HTML instead of plain text. Defaults to true when dump is set."),
+    dump: z.string().optional().describe("Save content to file at this path"),
+  },
+  async ({ tabId, offset, rawHtml, dump }) => {
+    // When dump is set, default rawHtml to true
+    const effectiveRawHtml = rawHtml ?? (dump ? true : false);
+    const content = await browserApi.getTabContent(tabId, offset, effectiveRawHtml);
+
+    // Handle dump
+    if (dump) {
+      try {
+        const dir = path.dirname(dump);
+        await fs.mkdir(dir, { recursive: true });
+        await fs.writeFile(dump, content.fullText, "utf-8");
+
+        return {
+          content: [{
+            type: "text",
+            text: `Saved ${effectiveRawHtml ? "HTML" : "text"} content (${content.fullText.length} chars) to: ${dump}${content.isTruncated ? " (content truncated)" : ""}`,
+          }],
+        };
+      } catch (e) {
+        return {
+          content: [{ type: "text", text: `Error saving to file: ${String(e)}`, isError: true }],
+        };
+      }
+    }
+
     let links: { type: "text"; text: string }[] = [];
     if (offset === 0) {
       // Only include the links if offset is 0 (default value). Otherwise, we can
@@ -807,11 +839,43 @@ mcpServer.tool(
       .boolean()
       .optional()
       .describe("Whether to use Defuddle for content extraction. Default: true (no cssSelector) or false (with cssSelector). Use this to override the default behavior."),
+    dump: z.string().optional().describe("Save result to file at this path as Markdown with YAML frontmatter"),
   },
-  async ({ tabId, maxLength, cssSelector, matchAll, mask, useDefuddle }) => {
+  async ({ tabId, maxLength, cssSelector, matchAll, mask, useDefuddle, dump }) => {
     const result = await browserApi.getMarkdownContent(tabId, { maxLength, cssSelector, matchAll, mask, useDefuddle });
 
     const { markdown, metadata, statistics } = result.content;
+
+    // Handle dump
+    if (dump) {
+      try {
+        // Build YAML frontmatter from metadata (exclude statistics)
+        const frontmatterFields: string[] = [];
+        if (metadata.title) frontmatterFields.push(`title: ${JSON.stringify(metadata.title)}`);
+        if (metadata.author) frontmatterFields.push(`author: ${JSON.stringify(metadata.author)}`);
+        if (metadata.publishedDate) frontmatterFields.push(`publishedDate: ${JSON.stringify(metadata.publishedDate)}`);
+        if (metadata.domain) frontmatterFields.push(`domain: ${JSON.stringify(metadata.domain)}`);
+        if (metadata.url) frontmatterFields.push(`url: ${JSON.stringify(metadata.url)}`);
+        if (metadata.siteName) frontmatterFields.push(`siteName: ${JSON.stringify(metadata.siteName)}`);
+
+        const fileContent = `---\n${frontmatterFields.join("\n")}\n---\n\n${markdown}`;
+
+        const dir = path.dirname(dump);
+        await fs.mkdir(dir, { recursive: true });
+        await fs.writeFile(dump, fileContent, "utf-8");
+
+        return {
+          content: [{
+            type: "text",
+            text: `Saved markdown (${statistics.wordCount} words) to: ${dump}${result.isTruncated ? " (content truncated)" : ""}`,
+          }],
+        };
+      } catch (e) {
+        return {
+          content: [{ type: "text", text: `Error saving to file: ${String(e)}`, isError: true }],
+        };
+      }
+    }
 
     return {
       content: [
@@ -945,7 +1009,10 @@ PREREQUISITE: install-media-interceptor must be called first on this tab.
 Options:
 - flush: Clear captured list after retrieval (for polling)
 - filter.types: Only return specific media types (video, audio, stream, image)
-- filter.urlPattern: Only return URLs containing this substring`,
+- filter.urlPattern: Only return URLs containing this substring
+
+Dump:
+- dump: Save results to a JSON file`,
   {
     tabId: z.number().describe("Tab ID to get resources from"),
     flush: z.boolean().optional().default(false).describe("Clear captured list after retrieval"),
@@ -953,8 +1020,9 @@ Options:
       types: z.array(z.enum(["video", "audio", "image", "stream"])).optional(),
       urlPattern: z.string().optional(),
     }).optional(),
+    dump: z.string().optional().describe("Save results to JSON file at this path"),
   },
-  async ({ tabId, flush, filter }) => {
+  async ({ tabId, flush, filter, dump }) => {
     const result = await browserApi.getTabMediaResources(tabId, flush, filter);
 
     if (!result.resources || result.resources.length === 0) {
@@ -963,21 +1031,41 @@ Options:
       };
     }
 
-    const formatted = result.resources.map((r: any, i: number) => {
-      let text = `[${i + 1}] ${r.type.toUpperCase()} (${r.source}): ${r.url}`;
-      if (r.mimeType) text += ` [${r.mimeType}]`;
-      if (r.metadata?.isBlobUrl) text += ` (Blob URL)`;
-      return {
-        type: "text" as const,
-        text
-      };
-    });
+    const formatted = result.resources.map((r: any) => ({
+      type: r.type,
+      source: r.source,
+      url: r.url,
+      mimeType: r.mimeType || undefined,
+      isBlobUrl: r.metadata?.isBlobUrl || false,
+    }));
+
+    const jsonResult = { count: formatted.length, resources: formatted };
+
+    // Handle dump
+    if (dump) {
+      try {
+        const dir = path.dirname(dump);
+        await fs.mkdir(dir, { recursive: true });
+        await fs.writeFile(dump, JSON.stringify(jsonResult, null, 2), "utf-8");
+
+        return {
+          content: [{
+            type: "text",
+            text: `Saved ${formatted.length} media resources to: ${dump}`,
+          }],
+        };
+      } catch (e) {
+        return {
+          content: [{ type: "text", text: `Error saving to file: ${String(e)}`, isError: true }],
+        };
+      }
+    }
 
     return {
-      content: [
-        { type: "text", text: `Found ${result.resources.length} media resources:` },
-        ...formatted
-      ]
+      content: [{
+        type: "text",
+        text: JSON.stringify(jsonResult, null, 2),
+      }],
     };
   }
 );
@@ -1282,7 +1370,10 @@ mcpServer.tool(
   `Find elements on a webpage using CSS selectors, XPath, text content, or Regular Expression. Returns JSON list of found elements with their 0-based index which can be used with click-element.
 
 Output:
-- fields: Array of field names to include (index, tagName, text, html, selector, xpath). Returns all if not specified.`,
+- fields: Array of field names to include (index, tagName, text, html, selector, xpath). Returns all if not specified.
+
+Dump:
+- dump: Save results to a JSON file`,
   {
     tabId: z.number().describe("The ID of the tab to search in"),
     query: z.string().describe("The search query (selector, xpath, text, or regex pattern)"),
@@ -1295,8 +1386,9 @@ Output:
       matchType: z.enum(["substring", "regex", "exact"]).default("substring").describe("Matching logic for text/href/attributes"),
       attributes: z.record(z.string()).optional().describe("Map of attribute names to values to filter by (e.g. {'aria-label': 'menu', 'data-testid': 'submit-btn'})")
     }).optional().describe("Advanced filtering options"),
+    dump: z.string().optional().describe("Save results to JSON file at this path"),
   },
-  async ({ tabId, query, mode, fields, filter }) => {
+  async ({ tabId, query, mode, fields, filter, dump }) => {
     const elements = await browserApi.findElement(tabId, query, mode, filter);
 
     if (elements.length === 0) {
@@ -1317,11 +1409,33 @@ Output:
       return pickFields(fullElement, fields);
     });
 
+    const result = { count: elements.length, elements: formattedElements };
+
+    // Handle dump
+    if (dump) {
+      try {
+        const dir = path.dirname(dump);
+        await fs.mkdir(dir, { recursive: true });
+        await fs.writeFile(dump, JSON.stringify(result, null, 2), "utf-8");
+
+        return {
+          content: [{
+            type: "text",
+            text: `Saved ${elements.length} elements to: ${dump}`,
+          }],
+        };
+      } catch (e) {
+        return {
+          content: [{ type: "text", text: `Error saving to file: ${String(e)}`, isError: true }],
+        };
+      }
+    }
+
     return {
       content: [
         {
           type: "text",
-          text: JSON.stringify({ count: elements.length, elements: formattedElements }, null, 2),
+          text: JSON.stringify(result, null, 2),
         },
       ],
     };

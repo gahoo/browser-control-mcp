@@ -106,6 +106,7 @@ export default definePlugin({
                 overwrite: z.boolean().optional().describe("Whether to overwrite if the file exists."),
                 append: z.boolean().optional().describe("Whether to append if the file exists (create if not)."),
                 autoClose: z.boolean().optional().default(true).describe("Whether to auto-close the browser tab after triggering Obsidian. Set to false if you need to grant permissions on first use."),
+                chunkSize: z.number().optional().describe(`Max encoded length per chunk for content splitting. Defaults to ${MAX_ENCODED_LENGTH}. Reduce if encountering URL length errors.`),
                 directExtractOptions: z.object({
                     tabId: z.number().describe("The ID of the tab to extract content from."),
                     maxLength: z.number().optional().describe("Max content length (default: 100000)"),
@@ -119,7 +120,7 @@ export default definePlugin({
                     frontmatter: z.string().optional().describe("YAML frontmatter or other metadata string to prepend to the content.")
                 }).optional().describe("Options for directly extracting content from a browser tab. If 'content' is not provided, this will be used."),
             }),
-            handler: async ({ vault, filename, content, overwrite, append, autoClose, directExtractOptions }, ctx) => {
+            handler: async ({ vault, filename, content, overwrite, append, autoClose, chunkSize, directExtractOptions }, ctx) => {
                 // If content is not provided but directExtractOptions is, fetch it from the browser
                 if ((!content || content.trim() === "") && directExtractOptions) {
                     try {
@@ -140,60 +141,79 @@ export default definePlugin({
                 }
 
                 // Check if content needs chunking
+                const effectiveChunkSize = chunkSize ?? MAX_ENCODED_LENGTH;
                 const encodedContentLength = content ? encodeURIComponent(content).length : 0;
-                const needsChunking = encodedContentLength > MAX_ENCODED_LENGTH;
+                const needsChunking = encodedContentLength > effectiveChunkSize;
 
                 if (needsChunking && content) {
                     // Split content into chunks
-                    const chunks = splitContentByEncodedLength(content, MAX_ENCODED_LENGTH);
-                    ctx.logger.info(`Content too long (${encodedContentLength} encoded chars), splitting into ${chunks.length} chunks`);
+                    const chunks = splitContentByEncodedLength(content, effectiveChunkSize);
+                    ctx.logger.info(`Content too long (${encodedContentLength} encoded chars), splitting into ${chunks.length} chunks (chunkSize: ${effectiveChunkSize})`);
 
-                    // Process first chunk with original parameters
-                    const firstUri = buildObsidianUri({
-                        vault,
-                        filename,
-                        content: chunks[0],
-                        overwrite,
-                        append,
-                    });
-
-                    ctx.logger.info(`Opening Obsidian URI (chunk 1/${chunks.length}): ${firstUri.substring(0, 100)}...`);
-                    const tabId = await ctx.browserApi.openTab(firstUri);
-
-                    // Wait for first chunk to be processed
-                    await new Promise(resolve => setTimeout(resolve, 5000));
-
-                    if (tabId !== undefined && autoClose !== false) {
-                        await ctx.browserApi.closeTabs([tabId]);
-                    }
-
-                    // Process remaining chunks with append mode
-                    for (let i = 1; i < chunks.length; i++) {
-                        // Wait between chunks
-                        await new Promise(resolve => setTimeout(resolve, CHUNK_DELAY_MS));
-
-                        const appendUri = buildObsidianUri({
+                    try {
+                        // Process first chunk with original parameters
+                        const firstUri = buildObsidianUri({
                             vault,
                             filename,
-                            content: chunks[i],
-                            append: true,
+                            content: chunks[0],
+                            overwrite,
+                            append,
                         });
 
-                        ctx.logger.info(`Opening Obsidian URI (chunk ${i + 1}/${chunks.length}): ${appendUri.substring(0, 100)}...`);
-                        const appendTabId = await ctx.browserApi.openTab(appendUri);
+                        ctx.logger.info(`Opening Obsidian URI (chunk 1/${chunks.length}): ${firstUri.substring(0, 100)}...`);
+                        const tabId = await ctx.browserApi.openTab(firstUri);
 
-                        await new Promise(resolve => setTimeout(resolve, 3000));
+                        // Wait for first chunk to be processed
+                        await new Promise(resolve => setTimeout(resolve, 5000));
 
-                        if (appendTabId !== undefined && autoClose !== false) {
-                            await ctx.browserApi.closeTabs([appendTabId]);
+                        if (tabId !== undefined && autoClose !== false) {
+                            await ctx.browserApi.closeTabs([tabId]);
                         }
+
+                        // Process remaining chunks with append mode
+                        for (let i = 1; i < chunks.length; i++) {
+                            // Wait between chunks
+                            await new Promise(resolve => setTimeout(resolve, CHUNK_DELAY_MS));
+
+                            const appendUri = buildObsidianUri({
+                                vault,
+                                filename,
+                                content: chunks[i],
+                                append: true,
+                            });
+
+                            ctx.logger.info(`Opening Obsidian URI (chunk ${i + 1}/${chunks.length}): ${appendUri.substring(0, 100)}...`);
+                            const appendTabId = await ctx.browserApi.openTab(appendUri);
+
+                            await new Promise(resolve => setTimeout(resolve, 3000));
+
+                            if (appendTabId !== undefined && autoClose !== false) {
+                                await ctx.browserApi.closeTabs([appendTabId]);
+                            }
+                        }
+                    } catch (error) {
+                        const errorMsg = error instanceof Error ? error.message : String(error);
+                        ctx.logger.error(`Failed during chunked note creation: ${errorMsg}`);
+                        return {
+                            content: [{
+                                type: "text",
+                                text: `Error creating Obsidian note during chunked write:\n` +
+                                    `- File: ${filename ?? 'Untitled'}\n` +
+                                    `- Vault: ${vault ?? '(default)'}\n` +
+                                    `- Total chunks: ${chunks.length}\n` +
+                                    `- Chunk size limit: ${effectiveChunkSize}\n` +
+                                    `- Total encoded length: ${encodedContentLength}\n` +
+                                    `- Error: ${errorMsg}`,
+                                isError: true
+                            }]
+                        };
                     }
 
                     return {
                         content: [
                             {
                                 type: "text",
-                                text: `Created Obsidian note in ${chunks.length} chunks (content was ${encodedContentLength} encoded chars, exceeded ${MAX_ENCODED_LENGTH} limit)`,
+                                text: `Created Obsidian note in ${chunks.length} chunks (content was ${encodedContentLength} encoded chars, chunkSize: ${effectiveChunkSize})`,
                             },
                         ],
                     };
@@ -204,25 +224,42 @@ export default definePlugin({
 
                 ctx.logger.info(`Opening Obsidian URI: ${uri}`);
 
-                // Open tab to trigger the URI scheme handler
-                const tabId = await ctx.browserApi.openTab(uri);
+                try {
+                    // Open tab to trigger the URI scheme handler
+                    const tabId = await ctx.browserApi.openTab(uri);
 
-                // Auto-close the tab after a short delay to allow the URI to be processed
-                if (tabId !== undefined && autoClose !== false) {
-                    // Wait a bit for the URI to be processed by the OS
-                    await new Promise(resolve => setTimeout(resolve, 5000));
-                    await ctx.browserApi.closeTabs([tabId]);
-                    ctx.logger.info(`Closed temporary tab: ${tabId}`);
-                }
+                    // Auto-close the tab after a short delay to allow the URI to be processed
+                    if (tabId !== undefined && autoClose !== false) {
+                        // Wait a bit for the URI to be processed by the OS
+                        await new Promise(resolve => setTimeout(resolve, 5000));
+                        await ctx.browserApi.closeTabs([tabId]);
+                        ctx.logger.info(`Closed temporary tab: ${tabId}`);
+                    }
 
-                return {
-                    content: [
-                        {
+                    return {
+                        content: [
+                            {
+                                type: "text",
+                                text: `triggered Obsidian 'new' action: ${uri}${autoClose === false ? ' (tab left open for permission grant)' : ''}`,
+                            },
+                        ],
+                    };
+                } catch (error) {
+                    const errorMsg = error instanceof Error ? error.message : String(error);
+                    ctx.logger.error(`Failed to create Obsidian note: ${errorMsg}`);
+                    return {
+                        content: [{
                             type: "text",
-                            text: `triggered Obsidian 'new' action: ${uri}${autoClose === false ? ' (tab left open for permission grant)' : ''}`,
-                        },
-                    ],
-                };
+                            text: `Error creating Obsidian note:\n` +
+                                `- File: ${filename ?? 'Untitled'}\n` +
+                                `- Vault: ${vault ?? '(default)'}\n` +
+                                `- Content length: ${encodedContentLength} encoded chars\n` +
+                                `- URI length: ${uri.length} chars\n` +
+                                `- Error: ${errorMsg}`,
+                            isError: true
+                        }]
+                    };
+                }
             },
         },
         {

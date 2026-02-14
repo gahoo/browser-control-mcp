@@ -353,7 +353,7 @@ function pressKey(payload: { key: string, selector?: string, xpath?: string, ind
 }
 
 // Handler: Get Tab Content (TabContent / Markdown)
-function getTabContent(offset?: number) {
+function getTabContent(offset?: number, rawHtml?: boolean) {
     const MAX_CONTENT_LENGTH = 50_000;
 
     function getLinks() {
@@ -365,7 +365,8 @@ function getTabContent(offset?: number) {
     }
 
     let isTruncated = false;
-    let text = document.body.innerText.substring(offset || 0);
+    const source = rawHtml ? document.body.innerHTML : document.body.innerText;
+    let text = source.substring(offset || 0);
     if (text.length > MAX_CONTENT_LENGTH) {
         text = text.substring(0, MAX_CONTENT_LENGTH);
         isTruncated = true;
@@ -375,7 +376,7 @@ function getTabContent(offset?: number) {
         links: getLinks(),
         fullText: text,
         isTruncated,
-        totalLength: document.body.innerText.length
+        totalLength: source.length
     };
 }
 
@@ -461,8 +462,8 @@ browser.runtime.onMessage.addListener((message: any, sender, sendResponse) => {
                     return pressKey(message);
 
                 case "getTabContent":
-                    // This is for get-tab-content (raw text)
-                    return getTabContent(message.offset);
+                    // This is for get-tab-content (raw text or HTML)
+                    return getTabContent(message.offset, message.rawHtml);
 
                 case "getMarkdownContent":
                     // uses imported extractContent

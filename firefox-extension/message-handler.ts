@@ -45,7 +45,7 @@ export class MessageHandler {
         await this.sendRecentHistory(req.correlationId, req.searchQuery);
         break;
       case "get-tab-content":
-        await this.sendTabsContent(req.correlationId, req.tabId, req.offset);
+        await this.sendTabsContent(req.correlationId, req.tabId, req.offset, req.rawHtml);
         break;
       case "reorder-tabs":
         await this.reorderTabs(req.correlationId, req.tabOrder);
@@ -336,7 +336,8 @@ export class MessageHandler {
   private async sendTabsContent(
     correlationId: string,
     tabId: number,
-    offset?: number
+    offset?: number,
+    rawHtml?: boolean
   ): Promise<void> {
     const tab = await browser.tabs.get(tabId);
     if (tab.url && (await isDomainInDenyList(tab.url))) {
@@ -355,7 +356,8 @@ export class MessageHandler {
     try {
       response = await browser.tabs.sendMessage(tabId, {
         action: "getTabContent",
-        offset: Number(offset) || 0
+        offset: Number(offset) || 0,
+        rawHtml: !!rawHtml,
       });
     } catch (error: any) {
       if (error.message.includes("Could not establish connection") || error.message.includes("receiving end does not exist")) {

@@ -27,6 +27,7 @@ export interface GetTabContentServerMessage extends ServerMessageBase {
   cmd: "get-tab-content";
   tabId: number;
   offset?: number;
+  rawHtml?: boolean;
 }
 
 export interface ReorderTabsServerMessage extends ServerMessageBase {

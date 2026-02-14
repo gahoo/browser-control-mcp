@@ -219,12 +219,14 @@ export class BrowserAPI {
 
   async getTabContent(
     tabId: number,
-    offset: number
+    offset: number,
+    rawHtml?: boolean
   ): Promise<TabContentExtensionMessage> {
     const correlationId = this.sendMessageToExtension({
       cmd: "get-tab-content",
       tabId,
       offset,
+      rawHtml,
     });
     return await this.waitForResponse(correlationId, "tab-content");
   }
