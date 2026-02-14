@@ -45,9 +45,9 @@ Iterate through the filtered tabs:
   - **Target Domains**: Especially effective for **WeChat (mp.weixin.qq.com)**, **X Articles**, and deep-dive technical blogs.
 
 - **WeChat (mp.weixin.qq.com)**: Load [mp.weixin.qq.com.md](references/sites/mp.weixin.qq.com.md).
-  - **Error Detection**: Use `.weui-msg__title` to detect deleted or migrated articles.
   - **Classify**: Categorize into **Tech** (Tutorials, architecture deep-dives) or **Resources** (Tool lists, curated links).
   - **Process**: Follow the reference guide to choose between **Summary**, **Full-Text Archival**, or **Library Standards**.
+  - **Error Detection**: Detect deleted or migrated articles then close tab or click "访问文章" button.
 
 - **Twitter/X**: Load [x.com.md](references/sites/x.com.md).
   - Classify into News, Tech, or Resources.
