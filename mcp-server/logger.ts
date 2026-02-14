@@ -60,9 +60,40 @@ class Logger {
                 console.error(`[Logger] Failed to write to log file: ${err.message}`);
                 this.fileStream = null;
             });
+
+            // Redirect all stderr to the log file as well
+            // This captures uncaught exceptions, dependency warnings, etc.
+            this.redirectStderr();
         } catch (err) {
             console.error(`[Logger] Failed to initialize log file: ${err}`);
         }
+    }
+
+    private stderrRedirected = false;
+
+    private redirectStderr(): void {
+        if (!this.fileStream) return;
+
+        const fileStream = this.fileStream;
+        const originalWrite = process.stderr.write.bind(process.stderr);
+
+        process.stderr.write = ((
+            chunk: Uint8Array | string,
+            encodingOrCallback?: BufferEncoding | ((err?: Error) => void),
+            callback?: (err?: Error) => void
+        ): boolean => {
+            // Write to the log file
+            const text = typeof chunk === 'string' ? chunk : chunk.toString();
+            fileStream.write(text);
+
+            // Still write to original stderr
+            if (typeof encodingOrCallback === 'function') {
+                return originalWrite(chunk, encodingOrCallback);
+            }
+            return originalWrite(chunk, encodingOrCallback, callback);
+        }) as typeof process.stderr.write;
+
+        this.stderrRedirected = true;
     }
 
     private formatTimestamp(): string {
@@ -90,8 +121,9 @@ class Logger {
         // Always write to stderr (MCP uses stdout for communication)
         console.error(formattedMessage);
 
-        // Also write to file if configured
-        if (this.fileStream) {
+        // Write to file directly only if stderr is NOT redirected to the file
+        // (otherwise console.error above already writes to the file via the redirect)
+        if (this.fileStream && !this.stderrRedirected) {
             this.fileStream.write(formattedMessage + '\n');
         }
     }
