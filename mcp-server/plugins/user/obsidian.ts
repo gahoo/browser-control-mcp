@@ -27,8 +27,9 @@ function splitContentByEncodedLength(content: string, maxLen: number): string[] 
         let encodedLen = 0;
         let lastNewlineIndex = -1;
 
-        for (let i = 0; i < remaining.length; i++) {
-            const char = remaining[i];
+        // Use for...of to iterate through characters safely (handles surrogate pairs)
+        let charIndex = 0;
+        for (const char of remaining) {
             const encodedChar = encodeURIComponent(char);
 
             if (encodedLen + encodedChar.length > maxLen) {
@@ -36,11 +37,12 @@ function splitContentByEncodedLength(content: string, maxLen: number): string[] 
             }
 
             encodedLen += encodedChar.length;
-            splitIndex = i + 1;
+            charIndex += char.length;
+            splitIndex = charIndex;
 
             // Track the last newline position for natural splitting
             if (char === '\n') {
-                lastNewlineIndex = i + 1;
+                lastNewlineIndex = splitIndex;
             }
         }
 
@@ -138,6 +140,11 @@ export default definePlugin({
                             content: [{ type: "text", text: `Error fetching content from tab: ${String(error)}`, isError: true }]
                         };
                     }
+                }
+
+                // Ensure content is well-formed Unicode to prevent 'URI malformed' errors
+                if (content) {
+                    content = content.toWellFormed();
                 }
 
                 // Check if content needs chunking
