@@ -17,16 +17,18 @@ WeChat images use lazy-loading (`data-src`). To ensure archival captures real im
 - **Footer Removal**: Analyze the structure via `find-element` first. Use `mask` with `section:nth-of-type(n+X)` (where X is the index of the first irrelevant section like Author Bio, Ads, or Related Posts) to strip unnecessary tail information.
 - **Layout**: Set `useDefuddle: false` for high-fidelity archival to preserve original nesting.
 
-## 4. Archiving Strategies
+## 3. Archiving Strategies
 
 ### A. Summary Mode (Low to Medium Value)
 - **Objective**: Capture the gist of news or brief updates.
 - **Action**: Use `get-tab-markdown-content` and save a concise summary to Obsidian.
 
-### B. Zero-Loss Archival Mode (High Value)
-- **Objective**: Save long-form technical blogs, architecture deep-dives, or tutorials with 100% integrity.
-- **Tool**: Use `create-obsidian-note` with `directExtractOptions`, which is the same with `get-tab-markdown-content`. If failed, come up with a workaround with user approval.
-- **Integrity Check**: ALWAYS present the final sentence of the extracted text to the user for confirmation before saving.
+### B. Composite Archival Mode (High Value - Recommended)
+- **Objective**: Save long-form technical blogs, architecture deep-dives, or tutorials with 100% integrity and high readability.
+- **Workflow**: 
+  1. **Phase 1 (Summary)**: Create a new note with full metadata (Frontmatter) and a concise summary section (`# 📝 内容摘要`). Use `overwrite: true`.
+  2. **Phase 2 (Original)**: Use `create-obsidian-note` with `directExtractOptions` and `append: true`. **Crucially, ensure `directExtractOptions` uses the same extraction parameters as `get-tab-markdown-content`** (e.g., `cssSelector: "#js_content"`, `useDefuddle: false`). Prefix the content with an `# 📜 原文存档` header.
+- **Integrity Check**: ALWAYS present the final sentence of the extracted text to the user for confirmation before appending.
 
 ### C. Library & Media Database Standards (Books/Movies)
 - **Objective**: Create a comprehensive "Work Profile" for resources identified in listicles.
@@ -41,7 +43,7 @@ WeChat images use lazy-loading (`data-src`). To ensure archival captures real im
   - **Fallback**: If standard extraction fails to find images (e.g., in swiper/gallery posts), try extracting from selector `.share_content_page`.
 - **Metadata**: Always include `age` (target age group) in frontmatter for movie/educational entries.
 
-## 3. Unified Error Detection (RegExp Mode)
+## 4. Unified Error Detection (RegExp Mode)
 ONLY perform this check if extraction fails or content is suspiciously empty:
 - **Action**: Use `find-element` with `mode: "regexp"`, `fields: ["text"]`, and query `^(该内容已被发布者删除|该公众号已迁移)$`.
 - **Logic**:
@@ -49,6 +51,6 @@ ONLY perform this check if extraction fails or content is suspiciously empty:
   - **Match "该公众号已迁移"**: Locate and click the **"访问文章"** button to redirect, then restart the activation process.
   - **Note**: Only execute actions if the returned `text` is an **exact match** to avoid false positives.
 
-## 4. **Save to Obsidian**: 
+## 5. **Save to Obsidian**: 
 - Use `create-obsidian-note`.
   - **Storage**: Save to the `Clippings/` directory (e.g., `filename: "Clippings/Note Title.md"`).

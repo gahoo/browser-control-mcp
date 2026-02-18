@@ -39,10 +39,12 @@ Iterate through the filtered tabs:
   - **Database**: Views are automatically updated in `Library/书库.base` and `Library/影音库.base`.
 
 - **Full-Text Archival (General Strategy)**:
-  - **When to use**: Only when the objective is to save the **entire original text** without LLM summarization or compression.
-  - **Tool**: Use `create-obsidian-note` with `directExtractOptions`.
+  - **When to use**: For long-form technical blogs, architecture deep-dives, or tutorials where 100% integrity is required.
+  - **Composite Mode (Recommended)**: 
+    1. **Phase 1 (Summary)**: Create a note with full metadata and a `# 📝 内容摘要` section.
+    2. **Phase 2 (Original)**: Use `create-obsidian-note` with `directExtractOptions` and `append: true` to attach the lossless text under a `# 📜 原文存档` header.
   - **Rule**: ALWAYS mirror the parameters (selectors, `useDefuddle`, `maxLength`) used in successful `get-tab-markdown-content` calls to ensure visual and structural consistency.
-  - **Target Domains**: Especially effective for **WeChat (mp.weixin.qq.com)**, **X Articles**, and deep-dive technical blogs.
+  - **Target Domains**: Especially effective for **WeChat (mp.weixin.qq.com)**, **X Articles**, and technical blogs.
 
 - **WeChat (mp.weixin.qq.com)**: Load [mp.weixin.qq.com.md](references/sites/mp.weixin.qq.com.md).
   - **Classify**: Categorize into **Tech** (Tutorials, architecture deep-dives) or **Resources** (Tool lists, curated links).

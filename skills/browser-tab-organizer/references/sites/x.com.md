@@ -147,10 +147,12 @@ For high-value technical articles, opinions, or insights:
     - **Expansion (On-demand)**: If the content is truncated, find and **CLICK ALL** instances of: `button[data-testid="tweet-text-show-more-link"]`.
     - **Long Articles**: For X Articles, set `maxLength: 500000` to prevent truncation.
             - **Preservation Format**:
-                - **High-Value Long-form**: MUST include **Key Takeaways** (bullet points), **Summary** (1-2 sentences), and **Full Original Text (including ALL original images)**. Use `[[WikiLink]]` to connect related solutions.
-                    - **INTEGRITY RULE**: "Full Original Text" means **ZERO compression or omission**. You must capture from the headline down to the very last sentence.
-                    - **MANDATORY CONFIRMATION**: Before saving to Obsidian, you **MUST** present the final sentence of your captured text to the user and ask: "Is this the actual end of the article?"
-                - **Standard Tweet/Thread**: **Key Takeaways** only (plus text/images). No summary needed.    
+        - **Composite Mode (Recommended for High-Value Long-form)**: 
+            1. **Phase 1 (Summary)**: Create a note with full metadata, **Key Takeaways**, and **Summary**. Use `overwrite: true`.
+            2. **Phase 2 (Original)**: Use `create-obsidian-note` with `directExtractOptions` and `append: true`. **Ensure `directExtractOptions` mirrors the successful extraction parameters.** Prefix with an `# 📜 原文存档` header.
+            - **INTEGRITY RULE**: "Full Original Text" means **ZERO compression or omission**. Capture from headline to the very last sentence.
+            - **MANDATORY CONFIRMATION**: Before appending, **MUST** present the final sentence to the user for confirmation.
+        - **Standard Tweet/Thread**: **Key Takeaways** only (plus text/images). No summary needed.    
     3. **Summarize & Tag**:
         - **Format**: Adhere to `obsidian-markdown` guidelines.
         - **AI Standard Tags**: Use specific types: `LLM`, `Model`, `ASR`, `TTS`, `Multimodal`, `Agent`, `Prompt-Engineering`, `RAG`, `Skills`, `MCP`.
