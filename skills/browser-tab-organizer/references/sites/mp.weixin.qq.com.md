@@ -19,14 +19,14 @@ WeChat images use lazy-loading (`data-src`). To ensure archival captures real im
 
 ## 3. Archiving Strategies
 
-### A. Summary Mode (Low to Medium Value)
-- **Objective**: Capture the gist of news or brief updates.
-- **Action**: Use `get-tab-markdown-content` and save a concise summary to Obsidian.
+### A. Summary Mode (Standard Value)
+- **Objective**: Restore the original **logic structure** and key findings of the article.
+- **Action**: Use `get-tab-markdown-content` and reconstruct a structured summary that reflects the article's flow (headings, core arguments, evidence). **Avoid brief, single-paragraph summaries.**
 
 ### B. Composite Archival Mode (High Value - Recommended)
 - **Objective**: Save long-form technical blogs, architecture deep-dives, or tutorials with 100% integrity and high readability.
 - **Workflow**: 
-  1. **Phase 1 (Summary)**: Create a new note with full metadata (Frontmatter) and a concise summary section (`# 📝 内容摘要`). Use `overwrite: true`.
+  1. **Phase 1 (Summary)**: Create a new note with full metadata (Frontmatter) and a high-quality summary section (`# 📝 内容摘要`). Use `overwrite: true`.
   2. **Phase 2 (Original)**: Use `create-obsidian-note` with `directExtractOptions` and `append: true`. **Crucially, ensure `directExtractOptions` uses the same extraction parameters as `get-tab-markdown-content`** (e.g., `cssSelector: "#js_content"`, `useDefuddle: false`). Prefix the content with an `# 📜 原文存档` header.
 - **Integrity Check**: ALWAYS present the final sentence of the extracted text to the user for confirmation before appending.
 
@@ -42,6 +42,10 @@ WeChat images use lazy-loading (`data-src`). To ensure archival captures real im
   - Put the resource's first image URL in the `cover` property AND display it in the body.
   - **Fallback**: If standard extraction fails to find images (e.g., in swiper/gallery posts), try extracting from selector `.share_content_page`.
 - **Metadata**: Always include `age` (target age group) in frontmatter for movie/educational entries.
+
+### D. Actionable Guide Mode (Tutorials & Prompt Sharing)
+- **Objective**: Create a lean **Technical Guide** for actionable posts.
+- **Action**: Extract "Prerequisites", "Core Workflow", "Code/Prompt Templates", and "Key Parameters". Skip narrative filler and focus on usability.
 
 ## 4. Unified Error Detection (RegExp Mode)
 ONLY perform this check if extraction fails or content is suspiciously empty:
