@@ -38,13 +38,19 @@ Iterate through the filtered tabs:
     5. **Deduplication**: Only merge information if a duplicate is detected within the current **conversation context**.
   - **Database**: Views are automatically updated in `Library/书库.base` and `Library/影音库.base`.
 
-- **Full-Text Archival (General Strategy)**:
-  - **When to use**: For long-form technical blogs, architecture deep-dives, or tutorials where 100% integrity is required.
-  - **Composite Mode (Recommended)**: 
-    1. **Phase 1 (Summary)**: Create a note with full metadata and a `# 📝 内容摘要` section.
-    2. **Phase 2 (Original)**: Use `create-obsidian-note` with `directExtractOptions` and `append: true` to attach the lossless text under a `# 📜 原文存档` header.
-  - **Rule**: ALWAYS mirror the parameters (selectors, `useDefuddle`, `maxLength`) used in successful `get-tab-markdown-content` calls to ensure visual and structural consistency.
-  - **Target Domains**: Especially effective for **WeChat (mp.weixin.qq.com)**, **X Articles**, and technical blogs.
+- **Content Archival Strategy**:
+  - **Extraction Priority**: 
+    1. ALWAYS prioritize `get-tab-markdown-content` for structured content.
+    2. If it fails (e.g., connection lost), AVOID using `get-tab-web-content`. 
+    3. Instead, perform a **Stability Retry**: `reload-browser-tab`, wait for load, re-run pre-actions (like Image Activation), and retry `get-tab-markdown-content`. Use `find-element` to target the main container if needed.
+  - **Archiving Modes**:
+    1. **Summary Mode (Standard)**: Restore the original logic structure and key findings. Reconstruct the article's flow (headings, core arguments). Avoid brief gists.
+    2. **Composite Mode (Full-Text)**: Used for long-form deep-dives. 
+       - **Phase 1**: Create note with metadata and logic-restored summary.
+       - **Phase 2**: Use `create-obsidian-note` with `directExtractOptions` and `append: true` to attach lossless text under `# 📜 原文存档`. **Rule**: Match the extraction parameters (selectors, `useDefuddle`) from Phase 1 to ensure consistency.
+    3. **Actionable Guide Mode (Tutorials/Prompts)**: For technical guides. Extract Prerequisites, Core Workflow, Code/Prompt Templates, and Key Parameters. Skip narrative filler.
+  - **Metadata & Links**: ALWAYS identify and record links to original research papers (e.g., arXiv, DOI links) in the note's frontmatter or a dedicated `# 🔗 资源链接` section.
+  - **Target Domains**: Highly effective for **WeChat (mp.weixin.qq.com)**, **X Articles**, and technical blogs.
 
 - **WeChat (mp.weixin.qq.com)**: Load [mp.weixin.qq.com.md](references/sites/mp.weixin.qq.com.md).
   - **Classify**: Categorize into **Tech** (Tutorials, architecture deep-dives) or **Resources** (Tool lists, curated links).
@@ -60,8 +66,17 @@ Iterate through the filtered tabs:
   - Skip video/large collections.
 
 - **GitHub**: Load [github.com.md](references/sites/github.com.md).
-  - Move to "GitHub" group.
-  - Use `get-tab-markdown-content` for summaries.
+  - **Deduplication**: Automatically close duplicate `github.com` URLs (keep smallest ID).
+  - **Theme-Based Grouping**: Categorize tabs into groups based on their primary **Topic**.
+    - **Sub-grouping (Threshold: 30)**: If a single topic group exceeds **30 tabs**, further subdivide based on **Sub-topics**.
+  - **Pre-Archival Evaluation**: For each group, generate a summary table:
+    - **Project** | **Stars/Status** | **Core Value** | **Recommendation**
+    - Identify "Zombie Projects" (Low stars + inactive) for immediate closure.
+  - **Markdown-First Archival**: 
+    - Use `get-tab-markdown-content(cssSelector: "main")` to extract Metadata, Positioning (Target Audience), Architecture (Stack/Logic), and Pros/Cons.
+    - **Fallback**: Only use specific selectors for Stats/License if not parsed from markdown.
+  - **Lean Archival**: Do NOT archive the full text. Focus on the project's utility and suitability.
+  - **Storage**: Use `create-obsidian-note` to save in **`Library/GitHub/{{Owner}}-{{RepoName}}.md`**. Overwrite existing files.
 
 ### 4. Post-Group Reflection & Optimization (Conditional)
 - **Review**: After finishing a group, evaluate if the process encountered redundant steps, selector failures, new patterns, or significant obstacles.
