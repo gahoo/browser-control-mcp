@@ -119,6 +119,11 @@ export default definePlugin({
                         behavior: z.enum(["replace", "remove"]).optional().default("replace").describe("Behavior for masked elements")
                     }).optional().describe("Mask options for handling specific elements"),
                     useDefuddle: z.boolean().optional().describe("Whether to use Defuddle for content extraction (default: true unless cssSelector is provided)"),
+                    regexPostProcess: z.array(z.object({
+                        pattern: z.string().describe("Regex pattern string. IMPORTANT: Use standard JSON escaping only — one backslash in regex = two characters in JSON string. Do NOT add extra escape layers."),
+                        flags: z.string().optional().describe("Regex flags (default: 'g'). Override only when needed."),
+                        replacement: z.string().describe("Replacement string. Use $1, $2 for capture group references."),
+                    })).optional().describe("Regex rules to post-process extracted markdown"),
                     frontmatter: z.string().optional().describe("YAML frontmatter or other metadata string to prepend to the content.")
                 }).optional().describe("Options for directly extracting content from a browser tab. If 'content' is not provided, this will be used."),
             }),

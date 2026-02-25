@@ -105,6 +105,11 @@ export interface GetTabMarkdownContentServerMessage extends ServerMessageBase {
       behavior?: "replace" | "remove";   // 'replace' converts to div (default), 'remove' deletes entirely
     };
     useDefuddle?: boolean;               // Whether to use Defuddle. Default: true (no cssSelector) or false (with cssSelector)
+    regexPostProcess?: Array<{
+      pattern: string;                   // Regex pattern string
+      flags?: string;                    // Regex flags (default: "g")
+      replacement: string;              // Replacement string (supports $1, $2 capture groups)
+    }>;
   };
 }
 

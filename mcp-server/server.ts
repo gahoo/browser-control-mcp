@@ -811,6 +811,11 @@ mcpServer.tool(
    
    Example: { mask: { elements: ['article'], behavior: 'replace' } }
    
+   Use regexPostProcess to apply regex transformations to the markdown output:
+   - Each rule has pattern, optional flags (default: 'g'), and replacement
+   - Rules are applied sequentially
+   - Example: [{ pattern: "\\\\n{3,}", replacement: "\\n\\n" }]
+   
    Best for: news articles, blog posts, documentation pages.
    Alternative: use 'get-tab-web-content' for raw text without formatting.`,
   {
@@ -839,10 +844,18 @@ mcpServer.tool(
       .boolean()
       .optional()
       .describe("Whether to use Defuddle for content extraction. Default: true (no cssSelector) or false (with cssSelector). Use this to override the default behavior."),
+    regexPostProcess: z
+      .array(z.object({
+        pattern: z.string().describe("Regex pattern string. IMPORTANT: Use standard JSON escaping only — one backslash in regex = two characters in JSON string. Example: to match a literal dot, use \\\\.  Do NOT add extra escape layers."),
+        flags: z.string().optional().describe("Regex flags (default: 'g'). Override only when needed, e.g. 'gs' for dotAll, 'gi' for case-insensitive."),
+        replacement: z.string().describe("Replacement string. Use $1, $2 for capture group references."),
+      }))
+      .optional()
+      .describe("Array of regex rules applied sequentially to the markdown output. Example: [{\"pattern\": \"\\\\n{3,}\", \"replacement\": \"\\n\\n\"}] to collapse triple+ newlines into double."),
     dump: z.string().optional().describe("Save result to file at this path as Markdown with YAML frontmatter"),
   },
-  async ({ tabId, maxLength, cssSelector, matchAll, mask, useDefuddle, dump }) => {
-    const result = await browserApi.getMarkdownContent(tabId, { maxLength, cssSelector, matchAll, mask, useDefuddle });
+  async ({ tabId, maxLength, cssSelector, matchAll, mask, useDefuddle, regexPostProcess, dump }) => {
+    const result = await browserApi.getMarkdownContent(tabId, { maxLength, cssSelector, matchAll, mask, useDefuddle, regexPostProcess });
 
     const { markdown, metadata, statistics } = result.content;
 

@@ -233,7 +233,7 @@ export class BrowserAPI {
 
   async getMarkdownContent(
     tabId: number,
-    options?: { maxLength?: number; cssSelector?: string; matchAll?: boolean; mask?: { elements: string[]; behavior?: "replace" | "remove" }; useDefuddle?: boolean }
+    options?: { maxLength?: number; cssSelector?: string; matchAll?: boolean; mask?: { elements: string[]; behavior?: "replace" | "remove" }; useDefuddle?: boolean; regexPostProcess?: Array<{ pattern: string; flags?: string; replacement: string }> }
   ): Promise<MarkdownContentExtensionMessage> {
     const correlationId = this.sendMessageToExtension({
       cmd: "get-tab-markdown-content",

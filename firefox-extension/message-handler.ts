@@ -676,7 +676,7 @@ export class MessageHandler {
   private async sendMarkdownContent(
     correlationId: string,
     tabId: number,
-    options?: { maxLength?: number; cssSelector?: string; matchAll?: boolean; mask?: { elements: string[]; behavior?: "replace" | "remove" }; useDefuddle?: boolean }
+    options?: { maxLength?: number; cssSelector?: string; matchAll?: boolean; mask?: { elements: string[]; behavior?: "replace" | "remove" }; useDefuddle?: boolean; regexPostProcess?: Array<{ pattern: string; flags?: string; replacement: string }> }
   ): Promise<void> {
     const tab = await browser.tabs.get(tabId);
     if (tab.url && (await isDomainInDenyList(tab.url))) {
@@ -730,6 +730,14 @@ export class MessageHandler {
 
     // Convert to Markdown
     let markdown = convertToMarkdown(cleanedHtml, tab.url || "");
+
+    // Apply regex post-processing (after markdown conversion, before truncation)
+    if (options?.regexPostProcess && options.regexPostProcess.length > 0) {
+      for (const rule of options.regexPostProcess) {
+        const regex = new RegExp(rule.pattern, rule.flags ?? 'g');
+        markdown = markdown.replace(regex, rule.replacement);
+      }
+    }
 
     // Apply length limit
     let isTruncated = false;
