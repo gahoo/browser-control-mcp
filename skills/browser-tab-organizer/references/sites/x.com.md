@@ -13,6 +13,24 @@
 - **X Article (Long-form) & High Reliability**: `div[data-contents="true"] > *`
   - *Status*: **Best choice for X Articles.**
   - *Usage*: Use with `matchAll: true`. Often captures text that other selectors miss.
+  - *Mandatory Regex Suite*: **MUST** use the following `regexPostProcess` to migrate domains and clean nested image links.
+  > [!danger] **Critical: No Extra Escaping**
+  > When calling MCP tools, provide the `pattern` exactly as shown below. **DO NOT** add extra escape layers (e.g., `\\` to `\\\\`) as the tool will receive the incorrect literal string.
+    ```json
+    [
+      {
+        "pattern": "https://pbs\\.twimg\\.com/(media/[^)\\s]+)",
+        "replacement": "https://twimg.42bio.info/$1",
+        "flags": "g"
+      },
+      {
+        "pattern": "\\[\\s*\\!\\[图像\\]\\((https://twimg\\.42bio\\.info/media/[^\\)]+)\\)\\s*\\]\\(https://x\\.com/[^\\)]+\\)",
+        "replacement": "![图像]($1)",
+        "flags": "g"
+      }
+    ]
+    ```
+  > If regex failed, chances is high that extra escaping is added. Try again without escaping.
 - **Full Context**: `article[data-testid="tweet"]`
   - *Usage*: Capture metadata + context.
 - **Links**: `a[href*="t.co"]`
