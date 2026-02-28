@@ -6,9 +6,11 @@ Use this when you need an overview of how many tabs are open per domain, sorted 
 
 ## Workflow
 1. **Export Tab Data**:
-   Use `get-list-of-open-tabs` with:
-   - `dump`: A path in the temporary directory (e.g., `<temp_dir>/tabs_dump.json`).
-   - `fields`: `["url"]`.
+   - **General Scan**: Use `get-list-of-open-tabs` to retrieve all tabs.
+   - **Scoped Scan**: If the scope is limited (e.g., specific website, title, or group), use `query-open-tabs` with filtering parameters (`url`, `title`, `groupId`) for better efficiency.
+   - **Common Parameters**:
+     - `dump`: A path in the temporary directory (e.g., `<temp_dir>/tabs_dump.json`).
+     - `fields`: `["url"]`.
 
 2. **Run Analysis**:
    Execute the Python script via `run_shell_command`:

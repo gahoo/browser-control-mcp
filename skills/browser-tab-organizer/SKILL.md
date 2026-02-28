@@ -10,7 +10,9 @@ This skill automates the classification, grouping, and resource saving of browse
 ## Core Workflow
 
 ### 1. Discovery & Grouping
-- **Scan**: List all open tabs (`get-list-of-open-tabs`).
+- **Scan**: 
+  - List all open tabs (`get-list-of-open-tabs`) for broad overview.
+  - **Scoped Scan**: If restricted by specific sites, titles, or group IDs, ALWAYS use `query-open-tabs` with filtering parameters for better efficiency.
 - **Grouping**: Categorize tabs into groups based on domain (Quark, GitHub, Twitter, WeChat, etc.).
 - **Deduplication**: Close duplicate URLs (keep smallest ID).
 
@@ -76,7 +78,8 @@ Iterate through the filtered tabs:
     - Use `get-tab-markdown-content(cssSelector: "main")` to extract Metadata, Positioning (Target Audience), Architecture (Stack/Logic), and Pros/Cons.
     - **Fallback**: Only use specific selectors for Stats/License if not parsed from markdown.
   - **Lean Archival**: Do NOT archive the full text. Focus on the project's utility and suitability.
-  - **Storage**: Use `create-obsidian-note` to save in **`Library/GitHub/{{Owner}}-{{RepoName}}.md`**. Overwrite existing files.
+  - **Template**: ALWAYS use **`references/templates/GitHub.md`** for structured metadata, engineering evaluation (Scores 1-5), and architecture analysis.
+  - **Storage**: Use `create-obsidian-note` to save in **`Library/GitHub/{{Owner}} · {{RepoName}}.md`**. Overwrite existing files.
 
 ### 4. Post-Group Reflection & Optimization (Conditional)
 - **Review**: After finishing a group, evaluate if the process encountered redundant steps, selector failures, new patterns, or significant obstacles.
