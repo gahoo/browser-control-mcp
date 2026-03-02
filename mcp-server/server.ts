@@ -853,11 +853,26 @@ mcpServer.tool(
       .optional()
       .describe("Array of regex rules applied sequentially to the markdown output. Example: [{\"pattern\": \"\\\\n{3,}\", \"replacement\": \"\\n\\n\"}] to collapse triple+ newlines into double."),
     dump: z.string().optional().describe("Save result to file at this path as Markdown with YAML frontmatter"),
+    clipboard: z.boolean().optional().describe("Copy markdown to system clipboard (suppresses content output like dump to save tokens)"),
   },
-  async ({ tabId, maxLength, cssSelector, matchAll, mask, useDefuddle, regexPostProcess, dump }) => {
+  async ({ tabId, maxLength, cssSelector, matchAll, mask, useDefuddle, regexPostProcess, dump, clipboard }) => {
     const result = await browserApi.getMarkdownContent(tabId, { maxLength, cssSelector, matchAll, mask, useDefuddle, regexPostProcess });
 
     const { markdown, metadata, statistics } = result.content;
+
+    // Handle clipboard
+    let clipboardSuccess = false;
+    let clipboardError: string | undefined;
+    if (clipboard) {
+      try {
+        const clipboardy = await import('clipboardy');
+        await clipboardy.default.write(markdown);
+        clipboardSuccess = true;
+      } catch (e) {
+        clipboardError = String(e);
+        logger.error(`Failed to copy to clipboard: ${clipboardError}`);
+      }
+    }
 
     // Handle dump
     if (dump) {
@@ -877,10 +892,11 @@ mcpServer.tool(
         await fs.mkdir(dir, { recursive: true });
         await fs.writeFile(dump, fileContent, "utf-8");
 
+        const clipboardNote = clipboardSuccess ? " (copied to clipboard)" : clipboardError ? ` (clipboard failed: ${clipboardError})` : "";
         return {
           content: [{
             type: "text",
-            text: `Saved markdown (${statistics.wordCount} words) to: ${dump}${result.isTruncated ? " (content truncated)" : ""}`,
+            text: `Saved markdown (${statistics.wordCount} words) to: ${dump}${result.isTruncated ? " (content truncated)" : ""}${clipboardNote}`,
           }],
         };
       } catch (e) {
@@ -888,6 +904,20 @@ mcpServer.tool(
           content: [{ type: "text", text: `Error saving to file: ${String(e)}`, isError: true }],
         };
       }
+    }
+
+    // Clipboard-only mode: suppress content output like dump
+    if (clipboard) {
+      const statusText = clipboardSuccess
+        ? `Copied markdown to clipboard (${statistics.wordCount} words, parsed in ${statistics.parseTimeMs}ms)${result.isTruncated ? " (content truncated)" : ""}`
+        : `Failed to copy to clipboard: ${clipboardError}`;
+      return {
+        content: [{
+          type: "text",
+          text: statusText,
+          ...(clipboardSuccess ? {} : { isError: true }),
+        }],
+      };
     }
 
     return {

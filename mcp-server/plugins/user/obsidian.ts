@@ -74,6 +74,7 @@ function buildObsidianUri(params: {
     content?: string;
     overwrite?: boolean;
     append?: boolean;
+    clipboard?: boolean;
 }): string {
     let uri = "obsidian://new?";
     const parts: string[] = [];
@@ -84,7 +85,11 @@ function buildObsidianUri(params: {
         const sanitized = params.filename.replace(/[\\:"*?<>|]/g, '-');
         parts.push(`file=${encodeURIComponent(sanitized)}`);
     }
-    if (params.content) parts.push(`content=${encodeURIComponent(params.content)}`);
+    if (params.clipboard) {
+        parts.push("clipboard");
+    } else if (params.content) {
+        parts.push(`content=${encodeURIComponent(params.content)}`);
+    }
     if (params.overwrite) parts.push("overwrite=true");
     if (params.append) parts.push("append=true");
 
@@ -109,6 +114,7 @@ export default definePlugin({
                 append: z.boolean().optional().describe("Whether to append if the file exists (create if not)."),
                 autoClose: z.boolean().optional().default(true).describe("Whether to auto-close the browser tab after triggering Obsidian. Set to false if you need to grant permissions on first use."),
                 chunkSize: z.number().optional().describe(`Max encoded length per chunk for content splitting. Defaults to ${MAX_ENCODED_LENGTH}. Reduce if encountering URL length errors.`),
+                clipboard: z.boolean().optional().default(true).describe("Use system clipboard to pass content to Obsidian (avoids URI length limits). Falls back to URI content/chunking on failure."),
                 directExtractOptions: z.object({
                     tabId: z.number().describe("The ID of the tab to extract content from."),
                     maxLength: z.number().optional().describe("Max content length (default: 100000)"),
@@ -127,7 +133,7 @@ export default definePlugin({
                     frontmatter: z.string().optional().describe("YAML frontmatter or other metadata string to prepend to the content.")
                 }).optional().describe("Options for directly extracting content from a browser tab. If 'content' is not provided, this will be used."),
             }),
-            handler: async ({ vault, filename, content, overwrite, append, autoClose, chunkSize, directExtractOptions }, ctx) => {
+            handler: async ({ vault, filename, content, overwrite, append, autoClose, chunkSize, clipboard, directExtractOptions }, ctx) => {
                 // If content is not provided but directExtractOptions is, fetch it from the browser
                 if ((!content || content.trim() === "") && directExtractOptions) {
                     try {
@@ -152,7 +158,38 @@ export default definePlugin({
                     content = content.toWellFormed();
                 }
 
-                // Check if content needs chunking
+                // Try clipboard path first (default: true)
+                if (clipboard !== false && content) {
+                    try {
+                        const clipboardy = await import('clipboardy');
+                        await clipboardy.default.write(content);
+                        ctx.logger.info(`Wrote ${content.length} chars to system clipboard for Obsidian`);
+
+                        const uri = buildObsidianUri({ vault, filename, overwrite, append, clipboard: true });
+                        ctx.logger.info(`Opening Obsidian URI (clipboard mode): ${uri}`);
+
+                        const tabId = await ctx.browserApi.openTab(uri);
+
+                        if (tabId !== undefined && autoClose !== false) {
+                            await new Promise(resolve => setTimeout(resolve, 5000));
+                            await ctx.browserApi.closeTabs([tabId]);
+                            ctx.logger.info(`Closed temporary tab: ${tabId}`);
+                        }
+
+                        return {
+                            content: [{
+                                type: "text",
+                                text: `Created Obsidian note via clipboard (${content.length} chars)${autoClose === false ? ' (tab left open for permission grant)' : ''}`,
+                            }],
+                        };
+                    } catch (error) {
+                        const errorMsg = error instanceof Error ? error.message : String(error);
+                        ctx.logger.warn(`Clipboard mode failed, falling back to URI content: ${errorMsg}`);
+                        // Fall through to original URI/chunking logic below
+                    }
+                }
+
+                // Fallback: original URI content / chunking logic
                 const effectiveChunkSize = chunkSize ?? MAX_ENCODED_LENGTH;
                 const encodedContentLength = content ? encodeURIComponent(content).length : 0;
                 const needsChunking = encodedContentLength > effectiveChunkSize;
