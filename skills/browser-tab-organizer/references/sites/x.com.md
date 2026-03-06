@@ -87,6 +87,7 @@ If a video requires deep analysis (e.g., lectures, talks):
 
 ## Image Handling
 - **Domain Migration**: Replace all `pbs.twimg.com` domains with `twimg.42bio.info` for stability.
+- **Param Integrity**: **MUST** preserve all original query parameters (e.g., `?format=jpg&name=large`) during migration; otherwise, images will fail to render.
 - **Format**: Use clean Markdown `![图像](url)`.
 - **Cleanup**: Remove outer links around images (e.g., `[![](img)](link)`) to keep the archive clean.
 
