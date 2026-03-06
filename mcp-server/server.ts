@@ -399,7 +399,7 @@ mcpServer.tool(
   {
     tabIds: z.array(z.number()).describe("Array of tab IDs to group"),
     groupId: z.string().optional().describe("Optional existing group ID to add tabs to"),
-    isCollapsed: z.boolean().optional().default(false).describe("Whether the group should be collapsed"),
+    isCollapsed: z.boolean().optional().describe("Whether the group should be collapsed (default: false for new groups)"),
     groupColor: z
       .enum([
         "grey",
@@ -413,24 +413,30 @@ mcpServer.tool(
         "orange",
       ])
       .optional()
-      .default("grey")
-      .describe("Color of the tab group"),
-    groupTitle: z.string().optional().default("New Group").describe("Title of the tab group"),
+      .describe("Color of the tab group (default: grey for new groups)"),
+    groupTitle: z.string().optional().describe("Title of the tab group (default: 'New Group' for new groups)"),
   },
   async ({ tabIds, groupId, isCollapsed, groupColor, groupTitle }) => {
+    // When creating a new group, apply defaults; when adding to existing group, only update explicitly set properties
+    const isNewGroup = groupId === undefined;
+    const effectiveCollapsed = isNewGroup ? (isCollapsed ?? false) : isCollapsed;
+    const effectiveColor = isNewGroup ? (groupColor ?? "grey") : groupColor;
+    const effectiveTitle = isNewGroup ? (groupTitle ?? "New Group") : groupTitle;
+
     const resultGroupId = await browserApi.groupTabs(
       tabIds,
-      isCollapsed,
-      groupColor,
-      groupTitle,
+      effectiveCollapsed,
+      effectiveColor,
+      effectiveTitle,
       groupId
     );
-    const action = groupId !== undefined ? "Added to" : "Created";
+    const action = isNewGroup ? "Created" : "Added to";
+    const displayTitle = effectiveTitle ?? "(existing group)";
     return {
       content: [
         {
           type: "text",
-          text: `${action} tab group "${groupTitle}" with ${tabIds.length} tabs (group ID: ${resultGroupId})`,
+          text: `${action} tab group "${displayTitle}" with ${tabIds.length} tabs (group ID: ${resultGroupId})`,
         },
       ],
     };
