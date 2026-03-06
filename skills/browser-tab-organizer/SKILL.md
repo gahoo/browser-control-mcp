@@ -24,8 +24,22 @@ This skill automates the classification, grouping, and resource saving of browse
     - **Recommended Action**: Full Archival, Summary, or Close.
 - **Filter**: Present high-value candidates to the user. **CLOSE** low-value or redundant tabs only after confirmation.
 
-### 3. Domain-Specific Processing
-Iterate through the filtered tabs:
+### 3. Execution Strategy & User Choice
+Before starting the processing phase, **ASK the user** which execution mode they prefer:
+
+- **Option A: Standard Mode (Main Agent)**
+  - Use when processing a few tabs (< 5) or when the user wants to stay in the current conversation context.
+  - The Main Agent performs extraction, summarization, and note creation sequentially.
+- **Option B: Distributed Mode (Subagent - RECOMMENDED for bulk)**
+  - Use when processing many tabs, long articles, or complex repositories (GitHub).
+  - **Action**: Delegate to the **`tab-content-processor`** subagent.
+  - **Benefits**: Offloads context-heavy extraction and complex processing to a specialized worker.
+  - **Handover**: Provide the subagent with `tabId`, the intended mode, and any site-specific context.
+
+---
+
+### 4. Domain-Specific Processing (Rules for BOTH Main & Subagent)
+Both agents MUST follow these rules during the execution phase:
 
 - **Library & Media Archival (Books/Movies)**:
   - **Objective**: Create individual high-fidelity notes for resources found in listicles.
@@ -41,6 +55,13 @@ Iterate through the filtered tabs:
   - **Database**: Views are automatically updated in `Library/书库.base` and `Library/影音库.base`.
 
 - **Content Archival Strategy**:
+  - **Tool & Token Optimization**:
+    - **`create-obsidian-note`**: 
+      - ALWAYS set `clipboard: true` by default to ensure reliability and bypass URI length limits.
+      - **Fallback**: If the operation fails with `clipboard: true` (e.g., permission denied or clipboard access error), retry with `clipboard: false`.
+    - **`get-tab-markdown-content`**:
+      - **Summary Mode**: Use `clipboard: false` (default) so the agent can receive and analyze the content to generate a summary.
+      - **Full-Text Archival**: Use `clipboard: true` to save tokens. This is used when the complete content needs to be archived (e.g., via `directExtractOptions` in `create-obsidian-note`) without the agent needing to process the text.
   - **Extraction Priority**: 
     1. ALWAYS prioritize `get-tab-markdown-content` for structured content.
     2. If it fails (e.g., connection lost), AVOID using `get-tab-web-content`. 

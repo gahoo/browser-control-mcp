@@ -1,7 +1,7 @@
 ---
 tags: ["{{tags}}"] # 扁平化标签，如 #python #mcp #llm
 title: "{{repo_name}}"
-short_description: "{{short_description}}" # 一句话简介
+short_description: "{{short_description}}" # 一句话中文简介
 owner: "{{owner}}"
 category: "{{category}}" # 大类主题，如 AI Agents, LLMs
 type: "{{type}}" # 项目性质：Library, App, Tutorial, Research, Collection
