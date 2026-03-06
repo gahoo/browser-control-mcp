@@ -86,6 +86,9 @@ Both agents MUST follow these rules during the execution phase:
   - **Process**: Follow the reference guide to choose between **Summary**, **Full-Text Archival**, or **Library Standards**.
   - **Error Detection**: Detect deleted or migrated articles then close tab or click "访问文章" button.
 
+- **YouTube**: Load [youtube.com.md](references/sites/youtube.com.md).
+  - Extract detailed video descriptions, links, and timestamps using the documented selector patterns.
+
 - **Twitter/X**: Load [x.com.md](references/sites/x.com.md).
   - Classify into News, Tech, or Resources.
   - For Resources: Extract drive links and open them.

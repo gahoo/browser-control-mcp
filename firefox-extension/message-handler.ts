@@ -121,7 +121,7 @@ export class MessageHandler {
         await this.isTabLoaded(req.correlationId, req.tabId);
         break;
       case "find-element":
-        await this.findElement(req.correlationId, req.tabId, req.query, req.mode);
+        await this.findElement(req.correlationId, req.tabId, req.query, req.mode, req.filter);
         break;
       case "type-text":
         await this.typeText(req.correlationId, req.tabId, req.text, req.selector, req.xpath, req.index);
@@ -785,7 +785,8 @@ export class MessageHandler {
     correlationId: string,
     tabId: number,
     query: string,
-    mode: "css" | "xpath" | "text" | "regexp"
+    mode: "css" | "xpath" | "text" | "regexp",
+    filter?: any
   ): Promise<void> {
     const tab = await browser.tabs.get(tabId);
     if (tab.url && (await isDomainInDenyList(tab.url))) {
@@ -799,7 +800,8 @@ export class MessageHandler {
       results = await browser.tabs.sendMessage(tabId, {
         action: "findElement",
         query,
-        mode
+        mode,
+        filter
       });
     } catch (error: any) {
       if (error.message.includes("Could not establish connection") || error.message.includes("receiving end does not exist")) {
