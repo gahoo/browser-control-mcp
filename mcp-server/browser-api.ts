@@ -351,25 +351,16 @@ export class BrowserAPI {
 
   async executeScript(
     tabId: number,
-    script: string,
-    password: string
+    script: string
   ): Promise<ExecuteScriptResultExtensionMessage> {
     const correlationId = this.sendMessageToExtension({
       cmd: "execute-script",
       tabId,
       script,
-      password,
     });
     return await this.waitForResponse(correlationId, "script-result");
   }
 
-  async getDebugPassword(): Promise<string> {
-    const correlationId = this.sendMessageToExtension({
-      cmd: "get-debug-password",
-    });
-    const message = await this.waitForResponse(correlationId, "debug-password");
-    return message.password;
-  }
 
   async reloadTab(tabId: number, bypassCache?: boolean): Promise<void> {
     const correlationId = this.sendMessageToExtension({

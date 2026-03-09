@@ -117,10 +117,7 @@ export interface ExecuteScriptResultExtensionMessage extends ExtensionMessageBas
   error?: string;
 }
 
-export interface DebugPasswordExtensionMessage extends ExtensionMessageBase {
-  resource: "debug-password";
-  password: string;
-}
+
 
 export interface MarkdownContentExtensionMessage extends ExtensionMessageBase {
   resource: "markdown-content";
@@ -282,7 +279,6 @@ export type ExtensionMessage =
   | ClickResultExtensionMessage
   | ExecuteScriptResultExtensionMessage
   | MarkdownContentExtensionMessage
-  | DebugPasswordExtensionMessage
   | TabReloadedExtensionMessage
   | InterceptedMediaResourcesExtensionMessage
   | BlobDataExtensionMessage

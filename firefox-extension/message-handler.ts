@@ -1,7 +1,7 @@
 
 import type { ServerMessageRequest, RunPromptResultServerMessage, ServerStatusServerMessage } from "@browser-control-mcp/common";
 import { WebsocketClient } from "./client";
-import { isCommandAllowed, isDomainInDenyList, COMMAND_TO_TOOL_ID, addAuditLogEntry, getDebugPassword, validateAndConsumeDebugPassword } from "./extension-config";
+import { isCommandAllowed, isDomainInDenyList, COMMAND_TO_TOOL_ID, addAuditLogEntry } from "./extension-config";
 import { convertToMarkdown } from "./utils/markdown-converter";
 import {
   TabReloadedExtensionMessage,
@@ -91,10 +91,7 @@ export class MessageHandler {
         await this.clickElement(req.correlationId, req.tabId, req.textContent, req.selector, req.xpath, req.index);
         break;
       case "execute-script":
-        await this.executeScript(req.correlationId, req.tabId, req.script, req.password);
-        break;
-      case "get-debug-password":
-        await this.sendDebugPassword(req.correlationId);
+        await this.executeScript(req.correlationId, req.tabId, req.script);
         break;
       case "get-tab-markdown-content":
         await this.sendMarkdownContent(req.correlationId, req.tabId, req.options);
@@ -612,20 +609,8 @@ export class MessageHandler {
   private async executeScript(
     correlationId: string,
     tabId: number,
-    script: string,
-    password: string
+    script: string
   ): Promise<void> {
-    // Validate password first
-    if (!validateAndConsumeDebugPassword(password)) {
-      await this.client.sendResourceToServer({
-        resource: "script-result",
-        correlationId,
-        result: null,
-        error: "Invalid or expired debug password",
-      });
-      return;
-    }
-
     const tab = await browser.tabs.get(tabId);
     if (tab.url && (await isDomainInDenyList(tab.url))) {
       throw new Error(`Domain in tab URL is in the deny list`);
@@ -662,15 +647,6 @@ export class MessageHandler {
         error: error.message,
       });
     }
-  }
-
-  private async sendDebugPassword(correlationId: string): Promise<void> {
-    const password = getDebugPassword();
-    await this.client.sendResourceToServer({
-      resource: "debug-password",
-      correlationId,
-      password,
-    });
   }
 
   private async sendMarkdownContent(

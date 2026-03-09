@@ -762,14 +762,13 @@ mcpServer.tool(
 
 mcpServer.tool(
   "execute-script",
-  "Execute arbitrary JavaScript code on a web page. Requires a debug password obtained from the get-debug-password tool. Password is consumed after successful use.",
+  "Execute arbitrary JavaScript code on a web page.",
   {
     tabId: z.number().describe("Tab ID to execute script in"),
     script: z.string().describe("JavaScript code to execute"),
-    password: z.string().describe("Debug password from get-debug-password tool"),
   },
-  async ({ tabId, script, password }) => {
-    const result = await browserApi.executeScript(tabId, script, password);
+  async ({ tabId, script }) => {
+    const result = await browserApi.executeScript(tabId, script);
     if (result.error) {
       return {
         content: [{ type: "text", text: `Error: ${result.error}`, isError: true }],
@@ -779,21 +778,6 @@ mcpServer.tool(
       content: [{
         type: "text",
         text: `Script executed. Result: ${JSON.stringify(result.result)}`,
-      }],
-    };
-  }
-);
-
-mcpServer.tool(
-  "get-debug-password",
-  "Get the debug password required for execute-script tool. The password is consumed after each successful script execution.",
-  {},
-  async () => {
-    const password = await browserApi.getDebugPassword();
-    return {
-      content: [{
-        type: "text",
-        text: `Debug password: ${password}`,
       }],
     };
   }

@@ -90,7 +90,6 @@ export interface ExecuteScriptServerMessage extends ServerMessageBase {
   cmd: "execute-script";
   tabId: number;
   script: string;
-  password: string;
 }
 
 export interface GetTabMarkdownContentServerMessage extends ServerMessageBase {
@@ -113,9 +112,7 @@ export interface GetTabMarkdownContentServerMessage extends ServerMessageBase {
   };
 }
 
-export interface GetDebugPasswordServerMessage extends ServerMessageBase {
-  cmd: "get-debug-password";
-}
+
 
 export interface ReloadTabServerMessage extends ServerMessageBase {
   cmd: "reload-tab";
@@ -257,7 +254,6 @@ export type ServerMessage =
   | ClickElementServerMessage
   | ExecuteScriptServerMessage
   | GetTabMarkdownContentServerMessage
-  | GetDebugPasswordServerMessage
   | ReloadTabServerMessage
   | InstallMediaInterceptorServerMessage
   | GetInterceptedMediaResourcesServerMessage

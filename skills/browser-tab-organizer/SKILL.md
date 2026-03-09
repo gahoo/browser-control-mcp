@@ -63,11 +63,11 @@ Both agents MUST follow these rules during the execution phase:
     - **`get-tab-markdown-content`**:
       - **Summary Mode**: Use `clipboard: false` (default) so the agent can receive and analyze the content to generate a summary.
       - **Full-Text Archival**: Use `clipboard: true` to save tokens. This is used when the complete content needs to be archived (e.g., via `directExtractOptions` in `create-obsidian-note`) without the agent needing to process the text.
-  - **Atomic Extraction Sequence**: 
-    To ensure image activation and prevent password expiration, tools MUST be called **serially (one by one)**. Wait for each tool's success before proceeding:
+  - **Extraction Sequence**: 
+    To ensure image activation, tools MUST be called **serially (one by one)**. Wait for each tool's success before proceeding:
     1. **Load Check**: `reload-browser-tab` -> `is-tab-loaded` (MUST return `true`).
-    2. **Atomic Action**: `get-debug-password` -> `execute-script` (immediately after). NEVER parallelize or interleave other calls here.
-    3. **Verification**: After extraction, check for `data:image/svg+xml`. If found, retry the atomic sequence once.
+    2. **Image Activation**: `execute-script` to sync `data-src` to `src`.
+    3. **Verification**: After extraction, check for `data:image/svg+xml`. If found, retry the sequence once.
   - **Extraction Priority**: 
     1. ALWAYS prioritize `get-tab-markdown-content` for structured content.
     2. If it fails (e.g., connection lost), AVOID using `get-tab-web-content`. 

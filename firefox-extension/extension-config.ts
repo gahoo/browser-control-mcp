@@ -166,7 +166,6 @@ export const COMMAND_TO_TOOL_ID: Record<ServerMessageRequest["cmd"], string> = {
   "get-clickable-elements": "get-clickable-elements",
   "click-element": "click-element",
   "execute-script": "execute-script",
-  "get-debug-password": "execute-script",
   "get-tab-markdown-content": "get-tab-markdown-content",
   "reload-tab": "reload-browser-tab",
   "install-media-interceptor": "install-media-interceptor",
@@ -444,40 +443,4 @@ export function getToolNameById(toolId: string): string {
   return tool ? tool.name : toolId;
 }
 
-// Debug password management (in-memory state)
-let debugPassword: string | null = null;
 
-/**
- * Generates a new debug password
- * @returns The newly generated password
- */
-export function generateDebugPassword(): string {
-  debugPassword = crypto.randomUUID();
-  return debugPassword;
-}
-
-/**
- * Gets the current debug password, generating one if it doesn't exist
- * @returns The current debug password
- */
-export function getDebugPassword(): string {
-  if (!debugPassword) {
-    return generateDebugPassword();
-  }
-  return debugPassword;
-}
-
-/**
- * Validates and consumes the debug password
- * If valid, a new password is generated (consumed after use)
- * @param password The password to validate
- * @returns true if the password was valid, false otherwise
- */
-export function validateAndConsumeDebugPassword(password: string): boolean {
-  if (!debugPassword || debugPassword !== password) {
-    return false;
-  }
-  // Password is valid, generate a new one (consume after use)
-  generateDebugPassword();
-  return true;
-}
