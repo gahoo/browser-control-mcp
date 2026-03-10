@@ -314,7 +314,7 @@ Notes format: [{ "note": "<p>HTML content</p>" }]
 Attachments format: [{ "url": "...", "title": "...", "mimeType": "...", "linkMode": "imported_url"|"linked_url"|"linked_file" }]`,
             schema: z.object({
                 items: z
-                    .array(z.record(z.unknown()))
+                    .array(z.record(z.string(), z.unknown()))
                     .describe("Array of items in Zotero item format"),
                 uri: z
                     .string()

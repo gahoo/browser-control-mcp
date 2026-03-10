@@ -111,8 +111,36 @@ Replace `/path/to/repo` with the correct path.
 | `LOG_FILE` | No | Path to write log file (default: none, logs to stderr only) |
 | `PASTEBIN_URL` | No | Custom Pastebin API URL for `save-to-pastebin` tool (default: `https://shz.al/`) |
 | `CONTAINERIZED` | No | Set to `true` when running in Docker to bind to `0.0.0.0` |
+| `MCP_TRANSPORT` | No | Transport mode: `stdio` (default) or `http` (Streamable HTTP) |
+| `MCP_HTTP_PORT` | No | HTTP server port when using HTTP transport (default: `3000`) |
 
 It might take a few seconds for the MCP server to connect to the extension.
+
+##### HTTP Transport Mode (Multi-Agent Support)
+
+By default, the MCP server uses stdio transport (one server per agent). To allow **multiple agents to share a single server**, use the Streamable HTTP transport:
+
+```bash
+# Start in HTTP mode (pick one):
+node mcp-server/dist/server.js --transport http
+# or
+MCP_TRANSPORT=http node mcp-server/dist/server.js
+# or
+cd mcp-server && npm run start:http
+```
+
+Then configure your MCP client to connect via HTTP. Example for Gemini CLI (`settings.json`):
+```json
+{
+    "mcpServers": {
+        "browser-control": {
+            "httpUrl": "http://localhost:3000/mcp"
+        }
+    }
+}
+```
+
+Note: In HTTP mode the server runs as a long-lived process and must be started before connecting agents. The `EXTENSION_SK` and `EXTENSION_PORT` environment variables must be set in the server's environment.
 
 ##### Configure the MCP server with Docker
 

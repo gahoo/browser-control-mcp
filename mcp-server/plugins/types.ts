@@ -31,12 +31,12 @@ export interface PluginContext {
 /**
  * Definition for a single tool
  */
-export interface ToolDefinition<T extends z.ZodRawShape = z.ZodRawShape> {
+export interface ToolDefinition<S extends z.ZodObject<any> = z.ZodObject<any>> {
     name: string;
     description: string;
-    schema: z.ZodObject<T>;
+    schema: S;
     handler: (
-        params: z.infer<z.ZodObject<T>>,
+        params: z.infer<S>,
         ctx: PluginContext
     ) => Promise<ToolResult>;
 }
@@ -87,8 +87,8 @@ export function definePlugin(definition: PluginDefinition): PluginDefinition {
 /**
  * Helper function for creating a single tool definition with type inference
  */
-export function defineTool<T extends z.ZodRawShape>(
-    tool: ToolDefinition<T>
-): ToolDefinition<T> {
+export function defineTool<S extends z.ZodObject<any>>(
+    tool: ToolDefinition<S>
+): ToolDefinition<S> {
     return tool;
 }

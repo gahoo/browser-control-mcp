@@ -1,5 +1,7 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
+import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
+import express from "express";
 import { z } from "zod";
 import { BrowserAPI } from "./browser-api";
 import { logger } from "./logger";
@@ -655,7 +657,7 @@ Dump:
       href: z.string().optional().describe("Filter by href URL (case-insensitive substring)"),
       visibleOnly: z.boolean().default(true).describe("Filter by visibility (default: true)"),
       matchType: z.enum(["substring", "regex", "exact"]).default("substring").describe("Matching logic for text/href/attributes"),
-      attributes: z.record(z.string()).optional().describe("Map of attribute names to values to filter by (e.g. {'aria-label': 'menu', 'data-testid': 'submit-btn'})")
+      attributes: z.record(z.string(), z.string()).optional().describe("Map of attribute names to values to filter by (e.g. {'aria-label': 'menu', 'data-testid': 'submit-btn'})")
     }).optional().describe("Advanced filtering options"),
     dump: z.string().optional().describe("Save results to file at this path"),
   },
@@ -1417,7 +1419,7 @@ Dump:
       href: z.string().optional().describe("Filter by href URL (case-insensitive substring)"),
       visibleOnly: z.boolean().default(true).describe("Filter by visibility (default: true)"),
       matchType: z.enum(["substring", "regex", "exact"]).default("substring").describe("Matching logic for text/href/attributes"),
-      attributes: z.record(z.string()).optional().describe("Map of attribute names to values to filter by (e.g. {'aria-label': 'menu', 'data-testid': 'submit-btn'})")
+      attributes: z.record(z.string(), z.string()).optional().describe("Map of attribute names to values to filter by (e.g. {'aria-label': 'menu', 'data-testid': 'submit-btn'})")
     }).optional().describe("Advanced filtering options"),
     dump: z.string().optional().describe("Save results to JSON file at this path"),
   },
@@ -1569,8 +1571,22 @@ browserApi.onRunPrompt(async (prompt, options) => {
   }
 });
 
+// Determine transport mode from CLI arg or env var
+// Priority: CLI arg > env var > default (stdio)
+function getTransportMode(): "stdio" | "http" {
+  const argIdx = process.argv.indexOf("--transport");
+  if (argIdx !== -1) {
+    const mode = process.argv[argIdx + 1];
+    if (mode === "http") return "http";
+  }
+  if (process.env.MCP_TRANSPORT === "http") return "http";
+  return "stdio";
+}
+
 // Initialize browser API and load plugins
 async function initialize() {
+  const transportMode = getTransportMode();
+
   try {
     await browserApi.init();
 
@@ -1578,19 +1594,73 @@ async function initialize() {
     const pluginsDir = path.join(__dirname, "plugins", "user");
     await loadAndRegisterPlugins(mcpServer, pluginsDir, { browserApi, logger });
 
-    // Connect to transport
-    const transport = new StdioServerTransport();
-    await mcpServer.connect(transport);
+    if (transportMode === "http") {
+      // --- Streamable HTTP transport (supports multiple agents) ---
+      const app = express();
+      app.use(express.json());
 
-    // Register server status provider
-    browserApi.setServerStatusProvider(() => {
-      const capabilities = mcpServer.server.getClientCapabilities();
-      return {
-        capabilities: {
-          sampling: !!capabilities?.sampling,
-        },
+      app.post("/mcp", async (req, res) => {
+        try {
+          const transport = new StreamableHTTPServerTransport({
+            sessionIdGenerator: undefined, // stateless mode
+          });
+          res.on("close", () => {
+            transport.close();
+          });
+          await mcpServer.connect(transport);
+          await transport.handleRequest(req, res, req.body);
+        } catch (err) {
+          logger.error("Error handling MCP request", { error: String(err) });
+          if (!res.headersSent) {
+            res.status(500).json({ error: "Internal server error" });
+          }
+        }
+      });
+
+      // Handle unsupported methods for protocol compliance
+      app.get("/mcp", (_req, res) => {
+        res.status(405).json({ error: "Method not allowed. Use POST." });
+      });
+      app.delete("/mcp", (_req, res) => {
+        res.status(405).json({ error: "Method not allowed." });
+      });
+
+      const httpPort = parseInt(process.env.MCP_HTTP_PORT || "3000", 10);
+      app.listen(httpPort, "localhost", () => {
+        logger.info("MCP Server (HTTP) listening", { url: `http://localhost:${httpPort}/mcp` });
+        console.log(`MCP Server (Streamable HTTP) listening on http://localhost:${httpPort}/mcp`);
+      });
+
+      // Graceful shutdown for HTTP mode
+      const shutdown = () => {
+        logger.info("Shutting down MCP Server (HTTP)");
+        browserApi.close();
+        mcpServer.close();
+        process.exit(0);
       };
-    });
+      process.on("SIGINT", shutdown);
+      process.on("SIGTERM", shutdown);
+    } else {
+      // --- stdio transport (default, backward compatible) ---
+      const transport = new StdioServerTransport();
+      await mcpServer.connect(transport);
+
+      // Register server status provider (only meaningful for single-client stdio)
+      browserApi.setServerStatusProvider(() => {
+        const capabilities = mcpServer.server.getClientCapabilities();
+        return {
+          capabilities: {
+            sampling: !!capabilities?.sampling,
+          },
+        };
+      });
+
+      process.stdin.on("close", () => {
+        browserApi.close();
+        mcpServer.close();
+        process.exit(0);
+      });
+    }
   } catch (err) {
     console.error("Initialization error", err);
     process.exit(1);
@@ -1598,9 +1668,3 @@ async function initialize() {
 }
 
 initialize();
-
-process.stdin.on("close", () => {
-  browserApi.close();
-  mcpServer.close();
-  process.exit(0);
-});

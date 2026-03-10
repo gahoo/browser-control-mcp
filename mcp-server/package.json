@@ -8,19 +8,22 @@
   "scripts": {
     "build": "tsc",
     "start": "node dist/server.js",
+    "start:http": "node dist/server.js --transport http",
     "pack-dxt": "npx @anthropic-ai/dxt pack"
   },
   "license": "MIT",
   "description": "Browser Control MCP Server",
   "dependencies": {
     "@browser-control-mcp/common": "../common",
-    "@modelcontextprotocol/sdk": "^1.7.0",
+    "@modelcontextprotocol/sdk": "^1.12.0",
+    "express": "^5.1.0",
     "clipboardy": "^5.3.1",
     "dayjs": "^1.11.13",
     "readline": "^1.3.0",
     "ws": "^8.18.1"
   },
   "devDependencies": {
+    "@types/express": "^5.0.0",
     "@types/ws": "^8.18.0",
     "typescript": "^5.8.2"
   }
