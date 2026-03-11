@@ -99,6 +99,10 @@ Both agents MUST follow these rules during the execution phase:
   - Refresh -> Check if it's a Book -> Auto-save -> Verify -> Close.
   - Skip video/large collections.
 
+- **Academic Papers (biorxiv, nature, arxiv, oup, bmc)**: Load [academic-papers.md](references/sites/academic-papers.md).
+  - For **bioRxiv**, load [biorxiv.org.md](references/sites/biorxiv.org.md).
+  - Archive papers to **Zotero** with AI-generated HTML summaries and high-fidelity PDF attachments.
+
 - **Hugging Face (huggingface.co)**: Load [huggingface.co.md](references/sites/huggingface.co.md).
   - **Sub-grouping (Threshold: 10+)**: If Hugging Face tabs are numerous (e.g., > 10), categorize them into sub-groups by **Modality** (LLM, Vision, Image, etc.) for efficient batch processing.
   - **Action**: Archive models using the **`references/templates/AI.md`** template into **`Library/AI-Models/`**.
