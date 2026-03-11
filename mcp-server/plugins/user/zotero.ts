@@ -9,7 +9,7 @@
  * - /api/* endpoints: for adding notes to existing items (Zotero 7 local REST API)
  */
 
-import { definePlugin, z } from "../types";
+import { definePlugin, z, type PluginContext } from "../types";
 
 // ── Constants ──────────────────────────────────────────────────────────
 
@@ -74,21 +74,93 @@ async function connectorFetch(
     }
 }
 
+type DownloadMethod = "browser" | "server" | "tab" | "auto";
+
+/** Download file data using the specified method */
+async function downloadFile(
+    url: string,
+    ctx: PluginContext,
+    downloadMethod: DownloadMethod,
+    tabId?: number
+): Promise<{ data: ArrayBuffer | null; error?: string; usedMethod: string }> {
+    const { logger } = ctx;
+
+    // Helper: server-side fetch
+    const serverFetch = async (): Promise<{ data: ArrayBuffer | null; error?: string }> => {
+        try {
+            logger.info(`Downloading via server: ${url}`);
+            const res = await fetch(url);
+            if (!res.ok) return { data: null, error: `HTTP ${res.status}: ${res.statusText}` };
+            return { data: await res.arrayBuffer() };
+        } catch (e) {
+            return { data: null, error: `Server fetch failed: ${String(e)}` };
+        }
+    };
+
+    // Helper: browser-based fetch
+    const browserFetch = async (mode?: "tab"): Promise<{ data: ArrayBuffer | null; error?: string }> => {
+        try {
+            logger.info(`Downloading via ${mode || "browser"}: ${url}`);
+            const result = await ctx.browserApi.fetchUrl(url, tabId, {
+                timeout: 60000,
+                fetchMode: mode === "tab" ? "tab" : undefined,
+            });
+            if (result.error || !result.data) {
+                return { data: null, error: result.error || "No data received" };
+            }
+            // browserApi returns base64-encoded data
+            const buffer = Buffer.from(result.data, "base64");
+            return { data: buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength) };
+        } catch (e) {
+            return { data: null, error: `Browser fetch failed: ${String(e)}` };
+        }
+    };
+
+    if (downloadMethod === "server") {
+        const res = await serverFetch();
+        return { ...res, usedMethod: "server" };
+    }
+
+    if (downloadMethod === "tab") {
+        if (!tabId) return { data: null, error: "Tab mode requires tabId", usedMethod: "tab" };
+        const res = await browserFetch("tab");
+        return { ...res, usedMethod: "tab" };
+    }
+
+    if (downloadMethod === "browser") {
+        const res = await browserFetch();
+        return { ...res, usedMethod: "browser" };
+    }
+
+    // "auto": try browser first, fallback to server
+    const browserRes = await browserFetch();
+    if (browserRes.data) {
+        return { ...browserRes, usedMethod: "browser" };
+    }
+    logger.warn(`Browser download failed (${browserRes.error}), falling back to server`);
+    const serverRes = await serverFetch();
+    return { ...serverRes, usedMethod: serverRes.data ? "server" : "server (failed)" };
+}
+
 /** Upload a file attachment to Zotero */
 async function saveAttachment(
     attachment: { id: string; url: string; title: string; mimeType: string; parentItem: string },
     sessionID: string,
-    logger: any
+    ctx: PluginContext,
+    downloadMethod: DownloadMethod = "auto",
+    tabId?: number
 ): Promise<boolean> {
+    const { logger } = ctx;
     try {
-        logger.info(`Downloading attachment: ${attachment.url}`);
-        const fileRes = await fetch(attachment.url);
-        if (!fileRes.ok) {
-            logger.error(`Failed to download attachment ${attachment.url}: ${fileRes.status}`);
+        const { data: arrayBuffer, error, usedMethod } = await downloadFile(
+            attachment.url, ctx, downloadMethod, tabId
+        );
+
+        if (!arrayBuffer) {
+            logger.error(`Failed to download attachment ${attachment.url}: ${error}`);
             return false;
         }
 
-        const arrayBuffer = await fileRes.arrayBuffer();
         const metadata = JSON.stringify({
             id: attachment.id,
             url: attachment.url,
@@ -97,7 +169,7 @@ async function saveAttachment(
             title: rfc2047Encode(attachment.title),
         });
 
-        logger.info(`Uploading attachment to Zotero: ${attachment.title} (${arrayBuffer.byteLength} bytes)`);
+        logger.info(`Uploading attachment to Zotero: ${attachment.title} (${arrayBuffer.byteLength} bytes, via ${usedMethod})`);
         const res = await fetch(`${ZOTERO_BASE}/connector/saveAttachment?sessionID=${sessionID}`, {
             method: "POST",
             headers: {
@@ -173,8 +245,11 @@ function parseAuthors(
 async function saveItemsWithAttachments(
     items: Record<string, any>[],
     uri: string,
-    logger: any
+    ctx: PluginContext,
+    downloadMethod: DownloadMethod = "auto",
+    tabId?: number
 ) {
+    const { logger } = ctx;
     // 1. Prepare items and separate file attachments
     const uploadQueue: any[] = [];
     const itemsPayload = [];
@@ -237,7 +312,7 @@ async function saveItemsWithAttachments(
 
     // Process uploads in parallel (limit concurrency if needed, but 5-10 is fine)
     await Promise.all(uploadQueue.map(async (att) => {
-        const success = await saveAttachment(att, sessionID, logger);
+        const success = await saveAttachment(att, sessionID, ctx, downloadMethod, tabId);
         if (success) successCount++;
         else failCount++;
     }));
@@ -320,9 +395,13 @@ Attachments format: [{ "url": "...", "title": "...", "mimeType": "...", "linkMod
                     .string()
                     .optional()
                     .describe("Source URI for the items (defaults to first item's url)"),
+                downloadMethod: z.enum(["browser", "server", "tab", "auto"]).default("auto")
+                    .describe("Download method for file attachments: browser (with cookies), server (direct), tab (in-page), auto (browser-first)"),
+                tabId: z.number().optional()
+                    .describe("Tab ID (required for 'tab' download mode)"),
             }),
-            handler: async ({ items, uri }, ctx) => {
-                const res = await saveItemsWithAttachments(items, uri || "", ctx.logger);
+            handler: async ({ items, uri, downloadMethod, tabId }, ctx) => {
+                const res = await saveItemsWithAttachments(items, uri || "", ctx, downloadMethod, tabId);
 
                 if (!res.success) {
                     const result = res.result;
@@ -398,6 +477,10 @@ Supported Attachment Types:
                     )
                     .optional()
                     .describe("Attachment URLs"),
+                downloadMethod: z.enum(["browser", "server", "tab", "auto"]).default("auto")
+                    .describe("Download method for file attachments: browser (with cookies), server (direct), tab (in-page), auto (browser-first)"),
+                tabId: z.number().optional()
+                    .describe("Tab ID (required for 'tab' download mode)"),
             }),
             handler: async (params, ctx) => {
                 ctx.logger.info(`Saving URL to Zotero: ${params.url}`);
@@ -447,7 +530,7 @@ Supported Attachment Types:
                 if (params.pages) item.pages = params.pages;
                 if (params.language) item.language = params.language;
 
-                const res = await saveItemsWithAttachments([item], params.url, ctx.logger);
+                const res = await saveItemsWithAttachments([item], params.url, ctx, params.downloadMethod, params.tabId);
 
                 if (!res.success) {
                     const result = res.result;
