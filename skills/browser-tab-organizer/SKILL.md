@@ -32,6 +32,7 @@ Before starting the processing phase, **ASK the user** which execution mode they
   - The Main Agent performs extraction, summarization, and note creation sequentially.
 - **Option B: Distributed Mode (Subagent - RECOMMENDED for bulk)**
   - Use when processing many tabs, long articles, or complex repositories (GitHub).
+  - **Constraint**: Each subagent session is limited to **5 tabs maximum** unless the user explicitly instructs otherwise.
   - **Action**: Delegate to the **`tab-content-processor`** subagent.
   - **Benefits**: Offloads context-heavy extraction and complex processing to a specialized worker.
   - **Handover**: Provide the subagent with `tabId`, the intended mode, and any site-specific context.
@@ -84,6 +85,7 @@ Both agents MUST follow these rules during the execution phase:
 - **WeChat (mp.weixin.qq.com)**: Load [mp.weixin.qq.com.md](references/sites/mp.weixin.qq.com.md).
   - **Classify**: Categorize into **Tech** (Tutorials, architecture deep-dives) or **Resources** (Tool lists, curated links).
   - **Process**: Follow the reference guide to choose between **Summary**, **Full-Text Archival**, or **Library Standards**.
+  - **Storage**: Save to `Clippings/` folder.
   - **Error Detection**: Detect deleted or migrated articles then close tab or click "访问文章" button.
 
 - **YouTube**: Load [youtube.com.md](references/sites/youtube.com.md).
@@ -96,6 +98,10 @@ Both agents MUST follow these rules during the execution phase:
 - **Quark Drive**: Load [quark.cn.md](references/sites/quark.cn.md).
   - Refresh -> Check if it's a Book -> Auto-save -> Verify -> Close.
   - Skip video/large collections.
+
+- **Hugging Face (huggingface.co)**: Load [huggingface.co.md](references/sites/huggingface.co.md).
+  - **Sub-grouping (Threshold: 10+)**: If Hugging Face tabs are numerous (e.g., > 10), categorize them into sub-groups by **Modality** (LLM, Vision, Image, etc.) for efficient batch processing.
+  - **Action**: Archive models using the **`references/templates/AI.md`** template into **`Library/AI-Models/`**.
 
 - **GitHub**: Load [github.com.md](references/sites/github.com.md).
   - **Deduplication**: Automatically close duplicate `github.com` URLs (keep smallest ID).
