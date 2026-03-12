@@ -10,6 +10,7 @@ Categorize papers dynamically based on their primary **Scientific Field**.
 - **Neuroscience**: Brain studies.
 - **Cell Biology**: Cellular research.
 - **AI-Foundations**: (e.g., OmniNA) - **Propose if more accurate.**
+- **Tags**: Use clear field names (e.g., `Bioinformatics`).
 
 ## 2. PDF URL Construction (Crucial)
 bioRxiv PDF links follow a deterministic pattern:

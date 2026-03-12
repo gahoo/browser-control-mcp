@@ -1,38 +1,42 @@
-# Academic Paper Archival (Zotero & AI Summary)
+# Academic Paper Archival (Zotero & Obsidian Dual-Sync)
 
-This guide defines the specialized workflow for classifying, summarizing, and archiving scholarly research papers from major domains (arXiv, Nature, bioRxiv, etc.) into **Zotero** with high-fidelity PDF storage.
+This guide defines the specialized workflow for classifying, assessing, and archiving scholarly research papers into both **Obsidian** and **Zotero** with high-fidelity PDF storage.
 
 ## 1. Domain Classification
 Categorize papers dynamically based on their primary **Scientific Field**.
-**Crucial Rule**: The list below is not exhaustive. Propose the most accurate domain for each paper (e.g., **AI**, **Bioinformatics**, **Genomics**, **Neuroscience**) and obtain user approval before finalizing.
+**Crucial Rule**: Propose the most accurate domain for each paper (e.g., **AI**, **Bioinformatics**, **Genomics**, **Neuroscience**) and obtain user approval before finalizing.
 - **Preprint**: bioRxiv, medRxiv, arXiv.org.
 - **Journal Article**: Nature, Cell, Science, OUP, BMC.
-- **Academic Publisher**: Nature Portfolio, Oxford Academic.
-- **Custom Domain**: (e.g., #proteomics, #synthetic-biology) - **Propose if more accurate.**
+- **Custom Domain**: (e.g., `Proteomics`, `Synthetic-Biology`) - **Propose if more accurate.**
+
+### 🔄 Template Evolution Rule
+When a paper belongs to a **new field** not currently covered by the detailed deep-dive section in `Paper.md`:
+1.  **Draft Update**: Propose a new sub-section for `Paper.md` (Methodology/Evidence) tailored to that field's specific "hard questions".
+2.  **User Approval**: Submit the template modification plan to the user.
+3.  **Update & Archive**: ONLY after the template is updated and approved, proceed to save the paper note using the new template structure.
 
 ## 2. Archival Workflow
 Follow these steps strictly for each scholarly tab:
 
-1. **Focus**: ALWAYS run `switch-to-tab(tabId)` before processing to ensure active session (Cookies).
-2. **Extraction & Summary**: 
-   - Use `get-tab-markdown-content` to extract the abstract or full text.
-   - **Gemini Summary**: Generate a 3-4 point HTML summary highlighting:
-     - **Key Breakthroughs** (核心突破)
-     - **Core Metrics** (关键指标/实验结论)
-     - **Research Impact** (研究意义)
-     - **Resource Links** (相关资源/GitHub)
-3. **Zotero High-Fidelity Sync**:
-   - **Tool**: Use **`save-url-to-zotero`**.
-   - **Crucial Parameters**:
-     - `downloadMethod: "browser"`: **MANDATORY!** Uses current browser context to fetch PDF, ensuring a real file is stored instead of just a link.
-     - `attachmentUrls`: Specify `type: "file"` to force file attachment.
-     - `notes`: Attach the generated HTML summary.
-     - `tags`: Add domain-specific tags (e.g., `#bioinformatics`, `#genomics`).
-4. **Stability Retry**: If extraction or saving fails, execute `reload-browser-tab` -> `is-tab-loaded` -> Retry.
+1. **Focus**: ALWAYS run `switch-to-tab(tabId)` before processing.
+2. **Value Assessment (Abstract Audit)**:
+   - **Action**: Extract abstract using `get-tab-markdown-content`.
+   - **Decision**:
+     - **High Value**: Proceed to full archival.
+     - **Low Value**: Close the tab directly.
+3. **Dual-Archival (High Value only)**:
+   - **Extraction**: Navigate to **Full Text** HTML and extract content.
+   - **Content Creation**: Populate the **`Paper.md`** template with detailed methodology, results, and critical analysis.
+   - **Obsidian Sync**: Use **`create-obsidian-note`** to save the full Markdown note to `Library/Papers/`.
+   - **Zotero Sync**: Use **`save-url-to-zotero`**:
+     - `downloadMethod: "browser"`: **MANDATORY** to fetch the actual PDF.
+     - `attachmentUrls`: Type `file`.
+     - `notes`: Include the Markdown body (the tool will handle HTML conversion).
+4. **Cleanup**: Close the tab after both Obsidian and Zotero confirmations.
 
 ## 3. Storage Standards
-- **Zotero Library**: Entry must contain Meta-data + PDF Attachment (Stored) + Gemini Summary Note.
-- **Note**: Ensure the PDF is not just a link but a downloaded file.
+- **Obsidian**: `Library/Papers/{{Title}}.md`
+- **Zotero**: Entry must contain Meta-data + PDF Attachment (File) + Comprehensive Reading Note.
 
 ## 4. Cleanup
-- Close the tab immediately after `save-url-to-zotero` returns `uploaded: 1`.
+- Close the tab immediately after archival is complete.
