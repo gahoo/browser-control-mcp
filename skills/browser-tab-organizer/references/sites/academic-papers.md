@@ -26,6 +26,11 @@ Follow these steps strictly for each scholarly tab:
      - **Low Value**: Close the tab directly.
 3. **Dual-Archival (High Value only)**:
    - **Extraction**: Navigate to **Full Text** HTML and extract content.
+   - **Logic Mapping (Complex Papers)**:
+     - Use the **`mermaid-visualizer`** skill to draft logic/algorithm diagrams.
+     - **Verification**: Run **`mermaid-check`** CLI tool on the generated code.
+     - **Correction**: If errors occur, use the error output to fix the syntax until it passes.
+     - **Integration**: Embed the verified Mermaid code into the `Core Idea` section of the template.
    - **Content Creation**: Populate the **`Paper.md`** template with detailed methodology, results, and critical analysis.
    - **Obsidian Sync**: Use **`create-obsidian-note`** to save the full Markdown note to `Library/Papers/`.
    - **Zotero Sync**: Use **`save-url-to-zotero`**:

@@ -26,18 +26,26 @@ code_link: "{{code_link}}"
 - **核心痛点 (The Problem)**：{{core_problem}} # 试图解决什么具体问题？为什么这个问题在当前节点很重要？
 - **前人局限 (Research Gap)**：{{research_gap}} # 现有的 SOTA 方法有什么做不到的地方？（性能瓶颈、成本极高、理论缺陷或假设太强？）
 
-## 2. 💡 核心贡献 (Contributions)
+## 2. 🖼️ 关键图表 (Key Figures)
+- **Figure 1**: ![]({{fig1_url}})
+  - **说明**: {{fig1_desc}} # 如：模型整体架构图，展示了...
+- **Figure 2**: ![]({{fig2_url}})
+  - **说明**: {{fig2_desc}} # 如：核心实验对比结果，证明了...
+
+## 3. 💡 核心贡献 (Contributions)
 - **关键突破 (Key Breakthrough)**：{{key_breakthrough}} # 论文最核心的理论或工程突破点。
 - **具体创新点**：
   1. {{contribution_1}}
   2. {{contribution_2}}
 
-## 3. 🛠️ 方法与架构 (Methodology)
+## 4. 🛠️ 方法与架构 (Methodology)
 
-### 3.1 核心思路 (Core Idea)
+### 4.1 核心思路 (Core Idea)
 - **整体机制**：{{core_mechanism}} # 作者解决问题的总体逻辑路径。
+- **逻辑流图 (Mermaid - 仅针对复杂文章)**：
+{{mermaid_charts}}
 
-### 3.2 领域深度拆解 (Domain-Specific Deep Dive)
+### 4.2 领域深度拆解 (Domain-Specific Deep Dive)
 *(注：根据论文所属领域保留并展开对应区块，删除无关区块)*
 
 #### 🔬 [Biology/Medicine] 生物医学与湿实验
@@ -61,28 +69,28 @@ code_link: "{{code_link}}"
 - **复杂度边界**：{{algo_complexity}} # 时间/空间复杂度是多少？是否逼近理论极限？
 - **核心证明思路 (Proof Sketch)**：{{algo_proof}} # 总结反证法、数学归纳法或放缩法的核心逻辑。
 
-## 4. 📊 实验与关键结果 (Experiments & Key Evidence)
+## 5. 📊 实验与关键结果 (Experiments & Key Evidence)
 - **数据集与 Benchmark**：{{datasets_benchmarks}} # 证明方法有效性的“竞技场”。
 - **对比基线 (Baselines)**：{{baselines}} # 它打败了谁？
 - **核心硬指标 (Hard Metrics)**：{{hard_metrics}} # 最核心的铁证数字，如 F1 提升了 x%，P-value < 0.01 等。
 - **消融/极限测试 (Ablation/Edge Cases)**：{{ablation_edge}} # 证明特定模块是否真的有效？极端情况表现如何？
 
-## 5. 🌟 科学意义与落地价值 (Significance & Applications)
+## 6. 🌟 科学意义与落地价值 (Significance & Applications)
 - **领域认知改变**：{{domain_shift}} # 这项研究推翻了什么固有认知，或建立了一个新的范式（Paradigm）？
 - **潜在应用场景**：{{applications}} # 技术的直接商业价值或临床转化可能性。
 
-## 6. 🤔 批判与启发 (Critique & Takeaways)
+## 7. 🤔 批判与启发 (Critique & Takeaways)
 - **本文局限性 (Limitations)**：{{limitations}} # 作者坦白的局限是什么？实验有没有避开明显的 Corner Cases？
 - **我的质疑 (My Skepticism)**：{{my_doubts}} # 数据的泛化性强吗？计算开销在实际工程中能接受吗？
 - **💡 灵感与下一步 (My Takeaways)**：
   1. {{takeaway_1}} # 它的方法能不能平移到我的研究场景/数据上？
   2. {{takeaway_2}} # 它的缺陷能否作为我下一篇论文/项目的突破口？
 
-## 7. 🔗 核心参考文献 (Key References)
+## 8. 🔗 核心参考文献 (Key References)
 - [ ] {{reference_1}} # *(作者提到的一篇极其重要的前置工作，需要回头去读)*
 - [ ] {{reference_2}}
 
-## 8. 📦 资源与附件 (Assets & Links)
+## 9. 📦 资源与附件 (Assets & Links)
 - **开源代码 (GitHub)**: {{github_link}}
 - **数据集下载**: {{dataset_link}}
 - **模型权重 (Hugging Face)**: {{model_weights}}
