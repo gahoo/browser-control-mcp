@@ -12,7 +12,7 @@ This skill automates the classification, grouping, and resource saving of browse
 ### 1. Discovery & Grouping
 - **Scan**: 
   - List all open tabs (`get-list-of-open-tabs`) for broad overview.
-  - **Scoped Scan**: If restricted by specific sites, titles, or group IDs, ALWAYS use `query-open-tabs` with filtering parameters for better efficiency.
+  - **Scoped Scan**: ALWAYS use `query-open-tabs` with filtering parameters (e.g., `url`, `title`, `groupId`) unless performing full tab statistics. This prevents token bloat from returning an excessive number of irrelevant tabs.
 - **Grouping**: Categorize tabs into groups based on domain (Quark, GitHub, Twitter, WeChat, etc.).
 - **Deduplication**: Close duplicate URLs (keep smallest ID).
 
@@ -57,8 +57,28 @@ Both agents MUST follow these rules during the execution phase:
 
 - **Content Archival Strategy**:
   - **Tool & Token Optimization**:
+    - **`query-open-tabs`**:
+      - **Query Requirement**: Unless performing full tab statistics, ALWAYS include filtering parameters (e.g., `url`, `title`, `groupId`) to prevent token bloat from returning an excessive number of tabs.
     - **`create-obsidian-note`**: 
-      - ALWAYS set `clipboard: true` by default to ensure reliability and bypass URI length limits.
+      - **Formatting Rule**: ALWAYS adhere to the **`obsidian-markdown`** skill guidelines. 
+      - **YAML Frontmatter**: Every note MUST start with a valid YAML block **at least** containing: `title`, `author`, `url`, `date` (YYYY-MM-DD), and `tags`.
+      - **Formatting Strictness**: 
+        - Use standard YAML list format for `tags` (bullet points, no `#` symbols). 
+        - Date MUST be `YYYY-MM-DD`.
+        - Example:
+          ```yaml
+          ---
+          title: "Article Title"
+          author: "Author Name"
+          url: "https://..."
+          date: 2026-03-17
+          tags:
+            - AI
+            - Research
+          ---
+          ```
+      - Feel free to extend other relevant properties (e.g., `model_parameters`).
+      - **Reliability**: ALWAYS set `clipboard: true` by default to ensure reliability and bypass URI length limits.
       - **Metadata Accuracy**: The `url` property in YAML MUST strictly use the exact URL from the browser tab (from `query-open-tabs`), not a generated or truncated one.
       - **Fallback**: If the operation fails with `clipboard: true` (e.g., permission denied or clipboard access error), retry with `clipboard: false`.
     - **`get-tab-markdown-content`**:

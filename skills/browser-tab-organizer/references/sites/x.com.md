@@ -13,23 +13,18 @@
 - **X Article (Long-form) & High Reliability**: `div[data-contents="true"] > *`
   - *Status*: **Best choice for X Articles.**
   - *Usage*: Use with `matchAll: true`. Often captures text that other selectors miss.
-  - *Mandatory Regex Suite*: **MUST** use the following `regexPostProcess` to migrate domains and clean nested image links.
+  - *Mandatory Regex Suite*: **MUST** use the following `regexPostProcess` literal values to migrate domains and clean nested image links.
   > [!danger] **Critical: No Extra Escaping**
-  > When calling MCP tools, provide the `pattern` exactly as shown below. **DO NOT** add extra escape layers (e.g., `\\` to `\\\\`) as the tool will receive the incorrect literal string.
-    ```json
-    [
-      {
-        "pattern": "https://pbs\\.twimg\\.com/(media/[^)\\s]+)",
-        "replacement": "https://twimg.42bio.info/$1",
-        "flags": "g"
-      },
-      {
-        "pattern": "\\[\\s*\\!\\[图像\\]\\((https://twimg\\.42bio\\.info/media/[^\\)]+)\\)\\s*\\]\\(https://x\\.com/[^\\)]+\\)",
-        "replacement": "![图像]($1)",
-        "flags": "g"
-      }
-    ]
-    ```
+  > When calling MCP tools, provide the `pattern` exactly as shown below. **DO NOT** use double backslashes (e.g., `\\`) as the tool will interpret them literally. Use the single-slash literal values.
+
+  **Rule 1 (Domain Migration):**
+  - Pattern: `https://pbs\.twimg\.com/(media/[^)\s]+)`
+  - Replacement: `https://twimg.42bio.info/$1`
+
+  **Rule 2 (Link Cleanup):**
+  - Pattern: `\[[\s\n]+(!\[[^\]]+\]\([^)]+\))[\s\n]+\]\([^)]+\)`
+  - Replacement: `$1`
+  - *Note*: Crucial for removing outer links wrapping images in X Articles. Use this exact literal pattern to ensure cross-line matching and tool stability.
   > If regex failed, chances is high that extra escaping is added. Try again without escaping.
 - **Full Context**: `article[data-testid="tweet"]`
   - *Usage*: Capture metadata + context.
@@ -93,7 +88,34 @@ If a video requires deep analysis (e.g., lectures, talks):
 
 ## Workflow: Classification & Extraction
 
-### 1. Classification (Taxonomy)
+### 1. Post Type Identification (The Probe Phase)
+**Objective**: Detect the underlying structure (Article, Thread, or Single Post) to select the optimal extraction strategy.
+
+- **Probe A (Long-form Detection)**: 
+    - **Tool [MCP]**: `find-element(query: "div[data-contents='true'] *", fields: ["tagName"], dump: "/dev/null")`
+    - **RESULT: X_ARTICLE** if **`count > 20`**.
+    - **Why**: Effectively measures "content density" by counting paragraph nodes without fetching any actual text.
+- **Probe B (Thread Detection)**: 
+    - **Tool [MCP]**: `find-element(mode: 'xpath', query: "//article[@data-testid='tweet']//span[starts-with(text(), '@')]", fields: ["text"])`
+    - **RESULT: THREAD** if the first 3 author handles are **IDENTICAL**.
+    - **Why**: Determines if the author is "self-replying" to form a knowledge chain.
+- **DEFAULT: SINGLE_POST**:
+    - **Condition**: If Probe A `count <= 20` AND Probe B handles differ. 
+    - **Context**: Standard one-off posts or posts followed by other users' replies.
+
+**Action Directives by Type**:
+- **IF X_ARTICLE**: 
+    - **Selector**: `div[data-contents="true"] > *` (+ `matchAll: true`, `maxLength: 500000`).
+    - **Critical**: **MANDATORY** to set `useDefuddle: false`.
+- **IF THREAD**: 
+    - **Selector**: **High Readability Composite** (+ `matchAll: true`).
+    - **MANDATORY Pre-action**: Must `scroll-page` (to bottom) and click all "Show More" buttons before extraction to ensure DOM rendering of deep segments.
+- **IF SINGLE_POST**: 
+    - **Selector**: **High Readability Composite** or `article div[data-testid="tweetText"]`.
+
+---
+
+### 2. Classification (Taxonomy)
 Analyze the tweet text and grouped links to categorize the tab. 
 > [!TIP] Dynamic Re-evaluation
 > Even if a tab is already grouped (e.g., in "Social/News"), if its content is identified as a tutorial, tool list, or technical guide, move it to **"Tech & Tools"** immediately.
@@ -110,9 +132,9 @@ Analyze the tweet text and grouped links to categorize the tab.
   - **Keywords**: *Paper, Journal, Research, Bioinformatics, Dataset, Visualization Toolkit, 论文, 学术, 生信*
   - **Action**: 
     1. Extract original literature/paper links.
-    2. **Link Discovery Priority**:
-       - Priority 1: Use `get-tab-markdown-content` with the **High Readability Composite** selector on the full thread.
-       - Priority 2: Use `get-clickable-elements` as fallback.
+    2. **Link Discovery Strategy**:
+       - **Primary**: Use `get-tab-markdown-content` with the **High Readability Composite** selector.
+       - **Precise Extraction (Recommended)**: Use `find-element(query: "a", filter: { text: "github.com", matchType: "substring" })` or `filter: { href: "arxiv.org" }` to surgically target resource links. **Avoid** `get-clickable-elements` as it is token-intensive and noisy.
     3. **Open & Group**: Open found paper links in the **"Papers"** tab group.
     4. **Archival**: ASK the user if they would like to save the tweet's context/summary as an Obsidian note.
     5. Group original tweet into "Academic".
@@ -127,13 +149,15 @@ Analyze the tweet text and grouped links to categorize the tab.
        - Use `save-to-pastebin` for each tweet (include original URL + text + empty line + `<video>`).
        - **Master Indexing**: After batch processing, you MUST create a final Pastebin note indexing and categorizing all shared links.
 
-### 2. Link Extraction (Resource Mode)
+### 3. Link Extraction (Resource Mode)
 If classified as **Resources**:
-1.  **Find Links**: Search for `pan.quark.cn` or other drive links within the tweet.
-2.  **Open**: Use `open-browser-tab` to open the drive link.
-3.  **Group**: Move the new drive tab to the corresponding platform group (e.g., "Quark").
+1.  **Find Links**: 
+    - **Method [MCP Tool]**: Use `find-element(query: "a", filter: { text: "DOMAIN_NAME", matchType: "substring" }, fields: ["text", "href"])`.
+    - **Logic**: Since X hides URLs behind `t.co` redirects, searching for the domain name (e.g., `github.com`, `pan.quark.cn`, `arxiv.org`) in the element **text** is the most efficient way to locate the correct link.
+2.  **Open**: Use `open-browser-tab` to open the drive or resource link.
+3.  **Group**: Move the new tab to the corresponding platform group (e.g., "Quark", "GitHub", "Papers").
 4.  **Cleanup**:
-    - If a drive link was found and opened: **CLOSE** the tweet tab (unless it contains other unique info).
+    - If a link was found and opened: **CLOSE** the tweet tab (unless it contains other unique info).
     - If no link found but looks like a resource: **KEEP** in "Downloads" group.
 
 ### 3. Knowledge Clipping & Archiving
@@ -149,8 +173,12 @@ For high-value technical articles, opinions, or insights:
 
 2.  **Extract Content**:
     - **Primary Tool**: **MUST** use `get-tab-markdown-content` for all knowledge extraction.
+    > [!danger] **Critical: No Defuddle**
+    > **NEVER** use `useDefuddle: true` on x.com. X's dynamic React structure (especially for Articles) will be completely wiped out by Defuddle's cleaning algorithm, resulting in "0 words" or "images only". Always use specific CSS selectors.
+    
     - **Selector Hierarchy & Retries**:
-        1.  **X Articles**: Start with `div[data-contents="true"]` + `matchAll: true`.
+        1.  **X Articles**: **MANDATORY**: Use `div[data-contents="true"] > *` + `matchAll: true`. 
+            *Note*: Do NOT attempt to use Composite or Tweet selectors for Articles; they will only capture the preview card.
         2.  **Standard/Threads**: Use **High Readability Composite** (`[data-testid="tweetPhoto"], [data-testid="tweetText"], [data-testid^="card.wrapper"]`) + `matchAll: true` to capture core content without UI noise.
         3.  **Fallback**: Use `article div[data-testid="tweetText"]` or `article[data-testid="tweet"]` if the composite selector fails or more metadata is needed.
     - **Failure Recovery Protocol**:
@@ -163,15 +191,18 @@ For high-value technical articles, opinions, or insights:
             2.  Wait 1-2 seconds.
             3.  Retry extraction.
         - **Persistence**: Attempt up to **3 retries** with different selectors before informing the user of a persistent failure.
-    - **Expansion (On-demand)**: If the content is truncated, find and **CLICK ALL** instances of: `button[data-testid="tweet-text-show-more-link"]`.
+    - **Expansion (On-demand)**: If the content is truncated, **MANDATORY**:
+        1. `scroll-page` (distance: 1 or to bottom) to trigger DOM rendering of deep thread elements.
+        2. Find and **CLICK ALL** instances of: `button[data-testid="tweet-text-show-more-link"]`.
     - **Long Articles**: For X Articles, set `maxLength: 500000` to prevent truncation.
             - **Preservation Format**:
-        - **Composite Mode (Recommended for High-Value Long-form)**: 
+        - **Composite Mode (Required for X_ARTICLE only)**: 
             1. **Phase 1 (Summary)**: Create a note with full metadata, **Key Takeaways**, and **Summary**. Use `overwrite: true`.
+                - **STRUCTURE RULE**: For long-form articles, the summary **MUST** faithfully restore the original logic, headings, and argumentative flow. It should be sufficiently detailed to serve as a high-fidelity surrogate for the original text, not just a brief gist.
             2. **Phase 2 (Original)**: Use `create-obsidian-note` with `directExtractOptions` and `append: true`. **Ensure `directExtractOptions` mirrors the successful extraction parameters.** Prefix with an `# 📜 原文存档` header.
             - **INTEGRITY RULE**: "Full Original Text" means **ZERO compression or omission**. Capture from headline to the very last sentence.
             - **MANDATORY CONFIRMATION**: Before appending, **MUST** present the final sentence to the user for confirmation.
-        - **Standard Tweet/Thread**: **Key Takeaways** only (plus text/images). No summary needed.    
+        - **THREAD / SINGLE_POST**: **Key Takeaways** and core insights only. **DO NOT** append the full original text unless explicitly requested by the user.    
     3. **Summarize & Tag**:
         - **Format**: Adhere to `obsidian-markdown` guidelines.
         - **AI Standard Tags**: Use specific types: `LLM`, `Model`, `ASR`, `TTS`, `Multimodal`, `Agent`, `Prompt-Engineering`, `RAG`, `Skills`, `MCP`.

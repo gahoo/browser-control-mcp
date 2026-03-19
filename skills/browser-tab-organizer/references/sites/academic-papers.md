@@ -24,13 +24,24 @@ Follow these steps strictly for each scholarly tab:
    - **Decision**:
      - **High Value**: Proceed to full archival.
      - **Low Value**: Close the tab directly.
-3. **Dual-Archival (High Value only)**:
+3. **PDF Discovery (Optimized)**: 
+   - **Primary Method**: Use `find-element` with CSS selector to minimize noise.
+     - **Mode**: `css`
+     - **Query**: `a[href*='pdf']`
+   - **Fallback**: If CSS fails, search for download text.
+     - **Mode**: `regexp`
+     - **Query**: `PDF`
+4. **Dual-Archival (High Value only)**:
    - **Extraction**: Navigate to **Full Text** HTML and extract content.
    - **Logic Mapping (Complex Papers)**:
-     - Use the **`mermaid-visualizer`** skill to draft logic/algorithm diagrams.
-     - **Verification**: Run **`mermaid-check`** CLI tool on the generated code.
-     - **Correction**: If errors occur, use the error output to fix the syntax until it passes.
-     - **Integration**: Embed the verified Mermaid code into the `Core Idea` section of the template.
+     1. **Drafting**: Use the **`mermaid-visualizer`** skill to design flowcharts or sequence diagrams.
+     2. **Incremental Verification (File-Based)**:
+        - **Stage**: Save the Mermaid code to a temporary file: `write_file(path: "temp_diag.mmd", content: "...")`.
+        - **Audit**: Run `run_shell_command("mermaid-check temp_diag.mmd")`.
+        - **Refine**: If exit code is 1, analyze the error, use **`replace`** or **`write_file`** to fix specific lines in `temp_diag.mmd`, and re-audit.
+        - **Loop**: Repeat until `mermaid-check` returns exit code 0.
+     3. **Integration**: Read the final content of `temp_diag.mmd` and embed it into the `Core Idea` section of the template.
+     4. **Cleanup**: Delete the temporary file.
    - **Content Creation**: Populate the **`Paper.md`** template with detailed methodology, results, and critical analysis.
    - **Obsidian Sync**: Use **`create-obsidian-note`** to save the full Markdown note to `Library/Papers/`.
    - **Zotero Sync**: Use **`save-url-to-zotero`**:
