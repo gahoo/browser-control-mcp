@@ -764,13 +764,41 @@ mcpServer.tool(
 
 mcpServer.tool(
   "execute-script",
-  "Execute arbitrary JavaScript code on a web page.",
+  "Execute arbitrary JavaScript code on a web page. Can be either an inline script or an absolute path (starting with / or ~) to a local .js/.mjs/.cjs file.",
   {
     tabId: z.number().describe("Tab ID to execute script in"),
-    script: z.string().describe("JavaScript code to execute"),
+    script: z.string().describe("JavaScript code to execute, or an absolute path to a local JS file"),
   },
   async ({ tabId, script }) => {
-    const result = await browserApi.executeScript(tabId, script);
+    let scriptCode = script;
+    
+    // Check if script is potentially an absolute file path.
+    // Also support ~ for home directory expansion.
+    if ((script.startsWith('/') || script.startsWith('~/')) && /\.(js|mjs|cjs)$/i.test(script)) {
+      try {
+        let filePath = script;
+        if (filePath.startsWith('~/')) {
+            const homeDir = process.env.HOME || process.env.USERPROFILE || '';
+            filePath = path.join(homeDir, filePath.slice(2));
+        }
+        const stats = await fs.stat(filePath);
+        if (stats.isFile()) {
+          scriptCode = await fs.readFile(filePath, "utf-8");
+          logger.debug(`Loaded script from file: ${filePath}`);
+        }
+      } catch (e) {
+        // If the file doesn't exist, we fallback to treating it as inline code.
+        // It's unlikely but possible that inline code starts with / and ends with .js
+        const err = e as NodeJS.ErrnoException;
+        if (err.code !== 'ENOENT') {
+           return {
+             content: [{ type: "text", text: `Error reading script file ${script}: ${String(e)}`, isError: true }],
+           };
+        }
+      }
+    }
+
+    const result = await browserApi.executeScript(tabId, scriptCode);
     if (result.error) {
       return {
         content: [{ type: "text", text: `Error: ${result.error}`, isError: true }],
