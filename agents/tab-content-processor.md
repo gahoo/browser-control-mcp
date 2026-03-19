@@ -5,18 +5,26 @@ max_turns: 50
 timeout_mins: 10
 tools:
   - activate_skill
-  - browser-control__get-tab-markdown-content
-  - browser-control__get-tab-web-content
-  - browser-control__reload-browser-tab
-  - browser-control__is-tab-loaded
-  - browser-control__scroll-page
-  - browser-control__execute-script
-  - browser-control__find-element
-  - browser-control__click-element
-  - browser-control__open-browser-tab
-  - browser-control__close-browser-tabs
-  - browser-control__create-obsidian-note
-  - browser-control__query-open-tabs
+  - mcp_browser-control_get-tab-markdown-content
+  - mcp_browser-control_reload-browser-tab
+  - mcp_browser-control_is-tab-loaded
+  - mcp_browser-control_scroll-page
+  - mcp_browser-control_execute-script
+  - mcp_browser-control_find-element
+  - mcp_browser-control_click-element
+  - mcp_browser-control_open-browser-tab
+  - mcp_browser-control_close-browser-tabs
+  - mcp_browser-control_create-obsidian-note
+  - mcp_browser-control_query-open-tabs
+  - mcp_browser-control_switch-to-tab
+  - mcp_browser-control_save-url-to-zotero
+  - mcp_browser-control_save-to-pastebin
+  - mcp_browser-control_fetch-url
+  - mcp_browser-control_install-media-interceptor
+  - mcp_browser-control_get-tab-media-resources
+  - run_shell_command
+  - write_file
+  - google_web_search
   - read_file
 ---
 
