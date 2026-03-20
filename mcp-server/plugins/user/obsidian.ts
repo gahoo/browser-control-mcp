@@ -171,7 +171,7 @@ export default definePlugin({
                         const tabId = await ctx.browserApi.openTab(uri);
 
                         if (tabId !== undefined && autoClose !== false) {
-                            await new Promise(resolve => setTimeout(resolve, 5000));
+                            await new Promise(resolve => setTimeout(resolve, 8000));
                             await ctx.browserApi.closeTabs([tabId]);
                             ctx.logger.info(`Closed temporary tab: ${tabId}`);
                         }

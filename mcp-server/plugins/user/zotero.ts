@@ -85,6 +85,21 @@ async function downloadFile(
 ): Promise<{ data: ArrayBuffer | null; error?: string; usedMethod: string }> {
     const { logger } = ctx;
 
+    if (url.startsWith("file://") || url.startsWith("/")) {
+        try {
+            logger.info(`Detected local file, bypassing download method and reading via fs: ${url}`);
+            const fs = await import("fs/promises");
+            const pathStr = url.startsWith("file://") ? new URL(url).pathname : url;
+            const buffer = await fs.readFile(pathStr);
+            return {
+                data: buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength) as ArrayBuffer,
+                usedMethod: "fs"
+            };
+        } catch (e) {
+            return { data: null, error: `Local file read failed: ${String(e)}`, usedMethod: "fs" };
+        }
+    }
+
     // Helper: server-side fetch
     const serverFetch = async (): Promise<{ data: ArrayBuffer | null; error?: string }> => {
         try {
@@ -161,9 +176,26 @@ async function saveAttachment(
             return false;
         }
 
+        let displayUrl = attachment.url;
+        let filename: string | undefined = undefined;
+
+        if (attachment.url.startsWith("file://") || attachment.url.startsWith("/")) {
+            const pathStr = attachment.url.startsWith("file://") ? new URL(attachment.url).pathname : attachment.url;
+            filename = pathStr.split('/').pop() || "attachment";
+            displayUrl = `local://${encodeURIComponent(filename)}`;
+
+            if (attachment.title === "Attachment") {
+                attachment.title = filename;
+            }
+            if (filename.toLowerCase().endsWith(".md") && attachment.mimeType === "application/pdf") {
+                attachment.mimeType = "text/markdown";
+            }
+        }
+
         const metadata = JSON.stringify({
             id: attachment.id,
-            url: attachment.url,
+            url: displayUrl,
+            filename: filename,
             contentType: attachment.mimeType,
             parentItemID: attachment.parentItem,
             title: rfc2047Encode(attachment.title),
