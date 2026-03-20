@@ -9,6 +9,10 @@ This skill automates the classification, grouping, and resource saving of browse
 
 ## Core Workflow
 
+### 0. Engineering Standards
+- **Prohibited Tool Use**: NEVER call `run_shell_command` with a string that consists only of comments (e.g., `# cleanup`) or performs no functional action.
+- **Efficient Loading**: Do NOT use `sleep` to wait for page loading. Instead, use `is-tab-loaded` iteratively until it returns `true`.
+
 ### 1. Discovery & Grouping
 - **Scan**: 
   - List all open tabs (`get-list-of-open-tabs`) for broad overview.
@@ -36,6 +40,10 @@ Before starting the processing phase, **ASK the user** which execution mode they
   - **Action**: Delegate to the **`tab-content-processor`** subagent.
   - **Benefits**: Offloads context-heavy extraction and complex processing to a specialized worker.
   - **Handover**: Provide the subagent with `tabId`, the intended mode, and any site-specific context.
+- **Option C: Hybrid Mode (Main Agent + Subagent - TOKEN OPTIMIZED)**
+  - Use when you need the Main Agent to retain control over the broader workflow (e.g., creating complex related notes, tracking overall progress) but want to avoid the token penalty of reading large web pages.
+  - **Action**: The Main Agent handles the loop, tab querying, and file/note creation (e.g., `create-obsidian-note`). The Main Agent delegates ONLY the heavy reading (`get-tab-markdown-content`) and summarization steps to the **`tab-content-processor`** subagent.
+  - **Handover**: The Main Agent asks the subagent: "Read tabId X, apply [Site-specific rules], and return the processed markdown summary." The Main Agent then takes that synthesized text and creates the final note.
 
 ---
 

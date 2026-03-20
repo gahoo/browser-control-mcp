@@ -32,7 +32,8 @@ Follow the [Academic Paper Archival](academic-papers.md) workflow, but with thes
    - **Automation**: If a match is found, click the link (`click-element`) to navigate to the most recent version of the article before proceeding with archival.
 3. **Full-Text Navigation**:
    - **Requirement**: For full-text archival in Obsidian, ensure you are on the page ending in **`.full-text`**. 
-   - **Action**: If the current URL is the base/abstract URL, append `.full-text` and navigate, or click the "Full Text" tab on the page.
+   - **Action (Primary)**: Use `find-element(mode: "css", query: "a", filter: { text: "Full Text" })` to locate the link, then use **`click-element`** to navigate.
+   - **Action (Fallback)**: If the link is not found or clicking fails, use **URL Construction** (appending `.full-text`) and navigate via `execute-script`.
 4. **Extraction**: Use `get-tab-markdown-content` for the content.
 5. **Zotero Save**:
    - Use `save-url-to-zotero`.
