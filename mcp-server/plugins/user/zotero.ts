@@ -1104,5 +1104,331 @@ Requires Better BibTeX debug-bridge and ZOTERO_DEBUG_BRIDGE_TOKEN env var.`,
                 };
             },
         },
+
+        // ─── Tool 9: zotero-update-item ──────────────────────────────────
+        {
+            name: "zotero-update-item",
+            description: `Modify fields or tags of an existing Zotero item.
+Specify the item key and provide fields to update (as key-value pairs) and/or tag operations.
+
+Requires Better BibTeX debug-bridge and ZOTERO_DEBUG_BRIDGE_TOKEN env var.`,
+            schema: z.object({
+                key: z.string()
+                    .describe("The item key (8-char alphanumeric)"),
+                fields: z.record(z.string(), z.unknown()).optional()
+                    .describe("Fields to update as key-value pairs, e.g. {title: 'New Title', date: '2024'}"),
+                addTags: z.array(z.string()).optional()
+                    .describe("Tags to add to the item"),
+                removeTags: z.array(z.string()).optional()
+                    .describe("Tags to remove from the item"),
+            }),
+            handler: async ({ key, fields, addTags, removeTags }, ctx) => {
+                ctx.logger.info(`Updating Zotero item: ${key}`);
+
+                const fieldUpdates = fields
+                    ? Object.entries(fields).map(([k, v]) =>
+                        `item.setField(${JSON.stringify(k)}, ${JSON.stringify(v)});`
+                    ).join("\n")
+                    : "";
+
+                const addTagsCode = (addTags || []).length > 0
+                    ? (addTags as string[]).map(t => `item.addTag(${JSON.stringify(t)});`).join("\n")
+                    : "";
+
+                const removeTagsCode = (removeTags || []).length > 0
+                    ? (removeTags as string[]).map(t => `item.removeTag(${JSON.stringify(t)});`).join("\n")
+                    : "";
+
+                const script = [
+                    `var libraryID = Zotero.Libraries.userLibraryID;`,
+                    `var itemID = Zotero.Items.getIDFromLibraryAndKey(libraryID, ${JSON.stringify(key)});`,
+                    `if (!itemID) throw new Error('Item not found: ' + ${JSON.stringify(key)});`,
+                    `var item = Zotero.Items.get(itemID);`,
+                    fieldUpdates,
+                    addTagsCode,
+                    removeTagsCode,
+                    `await item.saveTx();`,
+                    `return { key: item.key, title: item.getField('title'), tags: item.getTags().map(function(t){return t.tag;}) };`,
+                ].filter(Boolean).join("\n");
+
+                const result = await debugBridgeFetch(script);
+
+                if (!result.ok) {
+                    return {
+                        content: [{
+                            type: "text" as const,
+                            text: `Failed to update item. ${bridgeErrorText(result)}`,
+                            isError: true,
+                        }],
+                    };
+                }
+
+                return {
+                    content: [{
+                        type: "text" as const,
+                        text: `Successfully updated item ${key}.\n${JSON.stringify(result.data, null, 2)}`,
+                    }],
+                };
+            },
+        },
+
+        // ─── Tool 10: zotero-manage-tags ─────────────────────────────────
+        {
+            name: "zotero-manage-tags",
+            description: `Manage tags in the Zotero library: list all tags, rename a tag, or delete a tag.
+
+Requires Better BibTeX debug-bridge and ZOTERO_DEBUG_BRIDGE_TOKEN env var.`,
+            schema: z.object({
+                action: z.enum(["list", "rename", "delete"])
+                    .describe("Action to perform"),
+                tag: z.string().optional()
+                    .describe("Tag name (required for rename/delete)"),
+                newName: z.string().optional()
+                    .describe("New tag name (required for rename)"),
+            }),
+            handler: async ({ action, tag, newName }, ctx) => {
+                ctx.logger.info(`Managing tags: ${action} ${tag || ""}`);
+
+                let script: string;
+
+                if (action === "list") {
+                    script = [
+                        `var libraryID = Zotero.Libraries.userLibraryID;`,
+                        `var tagMap = {};`,
+                        `var s = new Zotero.Search();`,
+                        `s.libraryID = libraryID;`,
+                        `s.addCondition('title', 'contains', '');`,
+                        `var ids = await s.search();`,
+                        `var items = await Zotero.Items.getAsync(ids);`,
+                        `for (var item of items) {`,
+                        `  if (!item.isRegularItem()) continue;`,
+                        `  var tags = item.getTags();`,
+                        `  for (var t of tags) {`,
+                        `    tagMap[t.tag] = (tagMap[t.tag] || 0) + 1;`,
+                        `  }`,
+                        `}`,
+                        `return Object.entries(tagMap).map(function(e) { return { tag: e[0], count: e[1] }; })`,
+                        `  .sort(function(a, b) { return b.count - a.count; });`,
+                    ].join("\n");
+                } else if (action === "rename") {
+                    if (!tag || !newName) throw new Error("Both 'tag' and 'newName' are required for rename");
+                    script = [
+                        `var libraryID = Zotero.Libraries.userLibraryID;`,
+                        `await Zotero.Tags.rename(libraryID, ${JSON.stringify(tag)}, ${JSON.stringify(newName)});`,
+                        `return { renamed: true, from: ${JSON.stringify(tag)}, to: ${JSON.stringify(newName)} };`,
+                    ].join("\n");
+                } else {
+                    // delete
+                    if (!tag) throw new Error("'tag' is required for delete");
+                    script = [
+                        `var libraryID = Zotero.Libraries.userLibraryID;`,
+                        `var tagID = Zotero.Tags.getID(${JSON.stringify(tag)});`,
+                        `if (!tagID) throw new Error('Tag not found: ' + ${JSON.stringify(tag)});`,
+                        `await Zotero.Tags.removeFromLibrary(libraryID, [tagID]);`,
+                        `return { deleted: true, tag: ${JSON.stringify(tag)} };`,
+                    ].join("\n");
+                }
+
+                const result = await debugBridgeFetch(script);
+
+                if (!result.ok) {
+                    return {
+                        content: [{
+                            type: "text" as const,
+                            text: `Tag operation failed. ${bridgeErrorText(result)}`,
+                            isError: true,
+                        }],
+                    };
+                }
+
+                if (action === "list") {
+                    const tags = result.data as any[];
+                    return {
+                        content: [{
+                            type: "text" as const,
+                            text: tags.length > 0
+                                ? `${tags.length} tag(s):\n\n${JSON.stringify(tags, null, 2)}`
+                                : `No tags found in library.`,
+                        }],
+                    };
+                }
+
+                return {
+                    content: [{
+                        type: "text" as const,
+                        text: JSON.stringify(result.data, null, 2),
+                    }],
+                };
+            },
+        },
+
+        // ─── Tool 11: zotero-manage-collections ──────────────────────────
+        {
+            name: "zotero-manage-collections",
+            description: `Manage collections in the Zotero library: list all collections, create a new collection, or add/remove items.
+
+Requires Better BibTeX debug-bridge and ZOTERO_DEBUG_BRIDGE_TOKEN env var.`,
+            schema: z.object({
+                action: z.enum(["list", "create", "addItems", "removeItems"])
+                    .describe("Action to perform"),
+                collectionKey: z.string().optional()
+                    .describe("Collection key (required for addItems/removeItems)"),
+                name: z.string().optional()
+                    .describe("Collection name (required for create)"),
+                parentKey: z.string().optional()
+                    .describe("Parent collection key (optional, for creating subcollections)"),
+                itemKeys: z.array(z.string()).optional()
+                    .describe("Item keys to add/remove (required for addItems/removeItems)"),
+            }),
+            handler: async ({ action, collectionKey, name, parentKey, itemKeys }, ctx) => {
+                ctx.logger.info(`Managing collections: ${action}`);
+
+                let script: string;
+
+                if (action === "list") {
+                    script = [
+                        `var libraryID = Zotero.Libraries.userLibraryID;`,
+                        `var cols = Zotero.Collections.getByLibrary(libraryID);`,
+                        `return cols.map(function(c) {`,
+                        `  var r = { key: c.key, name: c.name, itemCount: c.getChildItems(true).length };`,
+                        `  if (c.parentKey) r.parentKey = c.parentKey;`,
+                        `  return r;`,
+                        `});`,
+                    ].join("\n");
+                } else if (action === "create") {
+                    if (!name) throw new Error("'name' is required for create");
+                    const parentCode = parentKey
+                        ? [
+                            `var parentID = Zotero.Collections.getIDFromLibraryAndKey(libraryID, ${JSON.stringify(parentKey)});`,
+                            `if (parentID) col.parentID = parentID;`,
+                        ].join("\n")
+                        : "";
+                    script = [
+                        `var libraryID = Zotero.Libraries.userLibraryID;`,
+                        `var col = new Zotero.Collection();`,
+                        `col.libraryID = libraryID;`,
+                        `col.name = ${JSON.stringify(name)};`,
+                        parentCode,
+                        `await col.saveTx();`,
+                        `return { key: col.key, name: col.name };`,
+                    ].filter(Boolean).join("\n");
+                } else if (action === "addItems") {
+                    if (!collectionKey || !itemKeys?.length) throw new Error("'collectionKey' and 'itemKeys' required");
+                    script = [
+                        `var libraryID = Zotero.Libraries.userLibraryID;`,
+                        `var colID = Zotero.Collections.getIDFromLibraryAndKey(libraryID, ${JSON.stringify(collectionKey)});`,
+                        `if (!colID) throw new Error('Collection not found');`,
+                        `var col = Zotero.Collections.get(colID);`,
+                        `var keys = ${JSON.stringify(itemKeys)};`,
+                        `var added = 0;`,
+                        `for (var k of keys) {`,
+                        `  var id = Zotero.Items.getIDFromLibraryAndKey(libraryID, k);`,
+                        `  if (id) { col.addItem(id); added++; }`,
+                        `}`,
+                        `await col.saveTx();`,
+                        `return { collectionKey: col.key, added: added };`,
+                    ].join("\n");
+                } else {
+                    // removeItems
+                    if (!collectionKey || !itemKeys?.length) throw new Error("'collectionKey' and 'itemKeys' required");
+                    script = [
+                        `var libraryID = Zotero.Libraries.userLibraryID;`,
+                        `var colID = Zotero.Collections.getIDFromLibraryAndKey(libraryID, ${JSON.stringify(collectionKey)});`,
+                        `if (!colID) throw new Error('Collection not found');`,
+                        `var col = Zotero.Collections.get(colID);`,
+                        `var keys = ${JSON.stringify(itemKeys)};`,
+                        `var removed = 0;`,
+                        `for (var k of keys) {`,
+                        `  var id = Zotero.Items.getIDFromLibraryAndKey(libraryID, k);`,
+                        `  if (id) { col.removeItem(id); removed++; }`,
+                        `}`,
+                        `await col.saveTx();`,
+                        `return { collectionKey: col.key, removed: removed };`,
+                    ].join("\n");
+                }
+
+                const result = await debugBridgeFetch(script);
+
+                if (!result.ok) {
+                    return {
+                        content: [{
+                            type: "text" as const,
+                            text: `Collection operation failed. ${bridgeErrorText(result)}`,
+                            isError: true,
+                        }],
+                    };
+                }
+
+                return {
+                    content: [{
+                        type: "text" as const,
+                        text: JSON.stringify(result.data, null, 2),
+                    }],
+                };
+            },
+        },
+
+        // ─── Tool 12: zotero-get-citation ────────────────────────────────
+        {
+            name: "zotero-get-citation",
+            description: `Generate formatted citations or bibliography for Zotero items using the built-in CSL engine.
+Returns text or HTML formatted references in the specified citation style.
+
+Requires Better BibTeX debug-bridge and ZOTERO_DEBUG_BRIDGE_TOKEN env var.`,
+            schema: z.object({
+                keys: z.array(z.string())
+                    .describe("Item keys to generate citations for"),
+                style: z.string().optional()
+                    .describe("CSL style ID (e.g. 'http://www.zotero.org/styles/apa'). Uses Zotero default if omitted."),
+                format: z.enum(["text", "html"]).default("text")
+                    .describe("Output format"),
+                mode: z.enum(["bibliography", "citation"]).default("bibliography")
+                    .describe("bibliography = full reference list, citation = in-text citation (e.g. '(Smith, 2023)')"),
+            }),
+            handler: async ({ keys, style, format, mode }, ctx) => {
+                ctx.logger.info(`Generating ${mode} for ${keys.length} item(s)`);
+
+                const asCitation = mode === "citation" ? "true" : "false";
+                const styleCode = style
+                    ? `var format = 'bibliography=${JSON.stringify(style).slice(1, -1)}';`
+                    : `var format = Zotero.Prefs.get('export.quickCopy.setting');`;
+
+                const script = [
+                    `var libraryID = Zotero.Libraries.userLibraryID;`,
+                    `var items = [];`,
+                    `var keys = ${JSON.stringify(keys)};`,
+                    `for (var k of keys) {`,
+                    `  var id = Zotero.Items.getIDFromLibraryAndKey(libraryID, k);`,
+                    `  if (id) items.push(Zotero.Items.get(id));`,
+                    `}`,
+                    `if (!items.length) throw new Error('No valid items found');`,
+                    styleCode,
+                    `var qc = Zotero.QuickCopy;`,
+                    `var result = qc.getContentFromItems(items, format, null, ${asCitation});`,
+                    `return { ${format}: result.${format === "html" ? "html" : "text"}, itemCount: items.length };`,
+                ].join("\n");
+
+                const result = await debugBridgeFetch(script);
+
+                if (!result.ok) {
+                    return {
+                        content: [{
+                            type: "text" as const,
+                            text: `Citation generation failed. ${bridgeErrorText(result)}`,
+                            isError: true,
+                        }],
+                    };
+                }
+
+                const data = result.data as Record<string, unknown>;
+                const output = (data[format] || data.text || data.html || "") as string;
+                return {
+                    content: [{
+                        type: "text" as const,
+                        text: output || JSON.stringify(data, null, 2),
+                    }],
+                };
+            },
+        },
     ],
 });
