@@ -2,11 +2,12 @@
  * Zotero Plugin for Browser Control MCP
  *
  * Communicates with Zotero desktop client's local HTTP server (port 23119)
- * to save bibliographic items and notes into the user's Zotero library.
+ * to save, search, and manage bibliographic items in the user's Zotero library.
  *
  * Uses two APIs:
  * - /connector/* endpoints: for saving items (compatible with Zotero Translation Framework)
- * - /api/* endpoints: for adding notes to existing items (Zotero 7 local REST API)
+ * - /debug-bridge/execute: for search, read, and advanced operations via Better BibTeX
+ *   debug-bridge (requires ZOTERO_DEBUG_BRIDGE_TOKEN env var)
  */
 
 import { definePlugin, z, type PluginContext } from "../types";
@@ -223,18 +224,43 @@ async function saveAttachment(
     }
 }
 
-/** Send a request to the Zotero local REST API (/api/*) */
-async function apiFetch(
-    path: string,
-    options: { method?: string; body?: unknown } = {}
+/** Get the debug-bridge token from environment */
+function getDebugBridgeToken(): string | null {
+    return process.env.ZOTERO_DEBUG_BRIDGE_TOKEN || null;
+}
+
+/** Execute JavaScript in Zotero via Better BibTeX debug-bridge */
+async function debugBridgeFetch(
+    script: string,
+    params?: Record<string, string>
 ): Promise<{ ok: boolean; status: number; data: unknown; error?: string }> {
+    const token = getDebugBridgeToken();
+    if (!token) {
+        return {
+            ok: false,
+            status: 0,
+            data: null,
+            error: "ZOTERO_DEBUG_BRIDGE_TOKEN environment variable is not set. "
+                + "Please configure it to match the token in Zotero Config Editor "
+                + "(extensions.zotero.debug-bridge.token).",
+        };
+    }
+
     try {
-        const res = await fetch(`${ZOTERO_BASE}/api${path}`, {
-            method: options.method || "GET",
+        const url = new URL(`${ZOTERO_BASE}/debug-bridge/execute`);
+        if (params) {
+            for (const [k, v] of Object.entries(params)) {
+                url.searchParams.set(k, v);
+            }
+        }
+
+        const res = await fetch(url.toString(), {
+            method: "POST",
             headers: {
-                "Content-Type": "application/json",
+                "Content-Type": "text/plain",
+                "Authorization": `Bearer ${token}`,
             },
-            body: options.body ? JSON.stringify(options.body) : undefined,
+            body: script,
         });
 
         let data: unknown;
@@ -251,9 +277,15 @@ async function apiFetch(
             ok: false,
             status: 0,
             data: null,
-            error: `Cannot connect to Zotero API: ${String(e)}`,
+            error: `Cannot connect to Zotero debug-bridge: ${String(e)}`,
         };
     }
+}
+
+/** Format debug-bridge error for tool response */
+function bridgeErrorText(result: { error?: string; status: number; data: unknown }): string {
+    const detail = typeof result.data === "string" ? result.data : JSON.stringify(result.data);
+    return `${result.error || `Status: ${result.status}`}\n${detail}`;
 }
 
 /** Parse author strings into Zotero creator objects */
@@ -363,9 +395,9 @@ async function saveItemsWithAttachments(
 export default definePlugin({
     metadata: {
         name: "zotero",
-        version: "1.1.0",
+        version: "2.0.0",
         description:
-            "Save bibliographic items and notes to Zotero desktop client via its local HTTP server",
+            "Save, search, and manage bibliographic items in Zotero via Connector API and Better BibTeX debug-bridge",
     },
 
     tools: [
@@ -600,15 +632,14 @@ Supported Attachment Types:
             },
         },
 
-        // ─── Tool 4: add-note-to-zotero ──────────────────────────────────
+        // ─── Tool 4: add-note-to-zotero (via debug-bridge) ─────────────
         {
             name: "add-note-to-zotero",
             description: `Add a note to an existing item in the Zotero library.
 Requires the parent item's key (the 8-character alphanumeric ID visible in Zotero).
-
 The note content supports HTML formatting. Plain text will also work.
 
-Uses the Zotero 7 local REST API (/api/users/0/items).`,
+Requires Better BibTeX debug-bridge and ZOTERO_DEBUG_BRIDGE_TOKEN env var.`,
             schema: z.object({
                 parentItem: z
                     .string()
@@ -626,46 +657,353 @@ Uses the Zotero 7 local REST API (/api/users/0/items).`,
             handler: async ({ parentItem, note, tags }, ctx) => {
                 ctx.logger.info(`Adding note to Zotero item: ${parentItem}`);
 
-                const noteItem = {
-                    itemType: "note",
-                    parentItem,
-                    note,
-                    tags: (tags || []).map((t: string) => ({ tag: t })),
-                };
+                const tagsCode = (tags || []).length > 0
+                    ? `var tags = ${JSON.stringify(tags)}; for (var t of tags) { noteItem.addTag(t); }`
+                    : "";
 
-                // Try Zotero 7 local REST API
-                const result = await apiFetch("/users/0/items", {
-                    method: "POST",
-                    body: [noteItem],
-                });
+                const script = [
+                    `var libraryID = Zotero.Libraries.userLibraryID;`,
+                    `var itemID = Zotero.Items.getIDFromLibraryAndKey(libraryID, ${JSON.stringify(parentItem)});`,
+                    `if (!itemID) throw new Error('Parent item not found: ' + ${JSON.stringify(parentItem)});`,
+                    `var noteItem = new Zotero.Item('note');`,
+                    `noteItem.libraryID = libraryID;`,
+                    `noteItem.parentKey = ${JSON.stringify(parentItem)};`,
+                    `noteItem.setNote(${JSON.stringify(note)});`,
+                    tagsCode,
+                    `await noteItem.saveTx();`,
+                    `return { key: noteItem.key };`,
+                ].join("\n");
 
-                if (result.ok) {
+                const result = await debugBridgeFetch(script);
+
+                if (!result.ok) {
                     return {
-                        content: [
-                            {
-                                type: "text" as const,
-                                text: `Successfully added note to item ${parentItem}.\nNote length: ${note.length} characters`,
-                            },
-                        ],
+                        content: [{
+                            type: "text" as const,
+                            text: `Failed to add note. ${bridgeErrorText(result)}`,
+                            isError: true,
+                        }],
                     };
                 }
 
-                // If the local REST API doesn't support writes, report the error
-                const errorMsg =
-                    result.status === 0
-                        ? "Zotero is not running or not reachable."
-                        : result.status === 403 || result.status === 405
-                            ? `Zotero local API does not support write operations (status ${result.status}). Make sure you are using Zotero 7 and have enabled "Allow other applications on this computer to communicate with Zotero" in Settings > Advanced.`
-                            : `Unexpected error (status ${result.status}): ${JSON.stringify(result.data)}`;
+                const data = result.data as { key?: string };
+                return {
+                    content: [{
+                        type: "text" as const,
+                        text: `Successfully added note to item ${parentItem}.\nNote key: ${data?.key || "unknown"}\nNote length: ${note.length} characters`,
+                    }],
+                };
+            },
+        },
+
+        // ─── Tool 5: zotero-search ───────────────────────────────────────
+        {
+            name: "zotero-search",
+            description: `Search for items in the Zotero library. Supports searching by title, author, tag, collection, item type, and date range.
+Returns a list of matching items with key metadata fields.
+
+Requires Better BibTeX debug-bridge and ZOTERO_DEBUG_BRIDGE_TOKEN env var.`,
+            schema: z.object({
+                query: z.string().optional()
+                    .describe("General search (matches title, creator, year)"),
+                title: z.string().optional()
+                    .describe("Search by title (contains)"),
+                creator: z.string().optional()
+                    .describe("Search by author/creator name (contains)"),
+                tag: z.string().optional()
+                    .describe("Filter by exact tag name"),
+                collection: z.string().optional()
+                    .describe("Limit to collection (collection key, e.g. 'C72FDAP2')"),
+                itemType: z.string().optional()
+                    .describe("Filter by item type (e.g. 'journalArticle', 'book', 'conferencePaper')"),
+                dateFrom: z.string().optional()
+                    .describe("Date range start (e.g. '2020-01-01')"),
+                dateTo: z.string().optional()
+                    .describe("Date range end"),
+                limit: z.number().default(20)
+                    .describe("Maximum number of results (default: 20)"),
+            }),
+            handler: async (params, ctx) => {
+                ctx.logger.info(`Searching Zotero: ${JSON.stringify(params)}`);
+
+                const conditions: string[] = [];
+                if (params.query) conditions.push(
+                    `s.addCondition('quicksearch-titleCreatorYear', 'contains', ${JSON.stringify(params.query)});`);
+                if (params.title) conditions.push(
+                    `s.addCondition('title', 'contains', ${JSON.stringify(params.title)});`);
+                if (params.creator) conditions.push(
+                    `s.addCondition('creator', 'contains', ${JSON.stringify(params.creator)});`);
+                if (params.tag) conditions.push(
+                    `s.addCondition('tag', 'is', ${JSON.stringify(params.tag)});`);
+                if (params.collection) conditions.push(
+                    `s.addCondition('collection', 'is', ${JSON.stringify(params.collection)});`);
+                if (params.itemType) conditions.push(
+                    `s.addCondition('itemType', 'is', ${JSON.stringify(params.itemType)});`);
+                if (params.dateFrom) conditions.push(
+                    `s.addCondition('date', 'isAfter', ${JSON.stringify(params.dateFrom)});`);
+                if (params.dateTo) conditions.push(
+                    `s.addCondition('date', 'isBefore', ${JSON.stringify(params.dateTo)});`);
+
+                if (conditions.length === 0) {
+                    conditions.push(`s.addCondition('title', 'contains', '');`);
+                }
+
+                const script = [
+                    `var s = new Zotero.Search();`,
+                    `s.libraryID = Zotero.Libraries.userLibraryID;`,
+                    ...conditions,
+                    `var ids = await s.search();`,
+                    `ids = ids.slice(0, ${params.limit});`,
+                    `var items = await Zotero.Items.getAsync(ids);`,
+                    `return items.filter(function(i) { return i.isRegularItem(); }).map(function(item) {`,
+                    `  var creators = item.getCreators().map(function(c) {`,
+                    `    return c.fieldMode === 1 ? c.lastName : ((c.firstName || '') + ' ' + (c.lastName || '')).trim();`,
+                    `  });`,
+                    `  var r = {`,
+                    `    key: item.key, itemType: item.itemType,`,
+                    `    title: item.getField('title'), creators: creators,`,
+                    `    date: item.getField('date'),`,
+                    `    tags: item.getTags().map(function(t) { return t.tag; }),`,
+                    `  };`,
+                    `  try { r.abstractNote = item.getField('abstractNote'); } catch(e) {}`,
+                    `  try { r.url = item.getField('url'); } catch(e) {}`,
+                    `  try { r.DOI = item.getField('DOI'); } catch(e) {}`,
+                    `  try { r.publicationTitle = item.getField('publicationTitle'); } catch(e) {}`,
+                    `  return r;`,
+                    `});`,
+                ].join("\n");
+
+                const result = await debugBridgeFetch(script);
+
+                if (!result.ok) {
+                    return {
+                        content: [{
+                            type: "text" as const,
+                            text: `Search failed. ${bridgeErrorText(result)}`,
+                            isError: true,
+                        }],
+                    };
+                }
+
+                const items = result.data as any[];
+                return {
+                    content: [{
+                        type: "text" as const,
+                        text: items.length > 0
+                            ? `Found ${items.length} item(s):\n\n${JSON.stringify(items, null, 2)}`
+                            : `No items found matching the search criteria.`,
+                    }],
+                };
+            },
+        },
+
+        // ─── Tool 6: zotero-get-item ─────────────────────────────────────
+        {
+            name: "zotero-get-item",
+            description: `Get full details of a Zotero item by its key.
+Can optionally include child notes (with HTML content) and attachments (with file paths).
+
+Requires Better BibTeX debug-bridge and ZOTERO_DEBUG_BRIDGE_TOKEN env var.`,
+            schema: z.object({
+                key: z.string()
+                    .describe("The item key (8-char alphanumeric, e.g. 'ABCD1234')"),
+                includeNotes: z.boolean().default(false)
+                    .describe("Include child notes with their HTML content"),
+                includeAttachments: z.boolean().default(false)
+                    .describe("Include attachment info (filename, type, path)"),
+            }),
+            handler: async ({ key, includeNotes, includeAttachments }, ctx) => {
+                ctx.logger.info(`Getting Zotero item: ${key}`);
+
+                const notesBlock = includeNotes ? [
+                    `if (item.isRegularItem()) {`,
+                    `  var noteIDs = item.getNotes(); result.notes = [];`,
+                    `  for (var nid of noteIDs) {`,
+                    `    var n = Zotero.Items.get(nid);`,
+                    `    result.notes.push({ key: n.key, content: n.getNote(),`,
+                    `      tags: n.getTags().map(function(t){return t.tag;}), dateModified: n.dateModified });`,
+                    `  }`,
+                    `}`,
+                ].join("\n") : "";
+
+                const attBlock = includeAttachments ? [
+                    `if (item.isRegularItem()) {`,
+                    `  var attIDs = item.getAttachments(); result.attachments = [];`,
+                    `  for (var aid of attIDs) {`,
+                    `    var a = Zotero.Items.get(aid);`,
+                    `    var ai = { key: a.key, title: a.getField('title'),`,
+                    `      contentType: a.attachmentContentType, filename: a.attachmentFilename };`,
+                    `    try { ai.path = a.getFilePath(); } catch(e) {}`,
+                    `    result.attachments.push(ai);`,
+                    `  }`,
+                    `}`,
+                ].join("\n") : "";
+
+                const script = [
+                    `var libraryID = Zotero.Libraries.userLibraryID;`,
+                    `var itemID = Zotero.Items.getIDFromLibraryAndKey(libraryID, ${JSON.stringify(key)});`,
+                    `if (!itemID) throw new Error('Item not found: ' + ${JSON.stringify(key)});`,
+                    `var item = Zotero.Items.get(itemID);`,
+                    `var creators = item.getCreators().map(function(c) {`,
+                    `  return { firstName: c.firstName||'', lastName: c.lastName||'',`,
+                    `    creatorType: Zotero.CreatorTypes.getName(c.creatorTypeID) };`,
+                    `});`,
+                    `var result = { key: item.key, itemType: item.itemType,`,
+                    `  title: item.getField('title'), creators: creators,`,
+                    `  tags: item.getTags().map(function(t){return t.tag;}),`,
+                    `  dateAdded: item.dateAdded, dateModified: item.dateModified };`,
+                    `var fields = ['date','abstractNote','url','DOI','publicationTitle',`,
+                    `  'volume','issue','pages','language','ISBN','ISSN','extra'];`,
+                    `for (var f of fields) { try { var v = item.getField(f); if(v) result[f]=v; } catch(e){} }`,
+                    notesBlock,
+                    attBlock,
+                    `return result;`,
+                ].join("\n");
+
+                const result = await debugBridgeFetch(script);
+
+                if (!result.ok) {
+                    return {
+                        content: [{
+                            type: "text" as const,
+                            text: `Failed to get item. ${bridgeErrorText(result)}`,
+                            isError: true,
+                        }],
+                    };
+                }
 
                 return {
-                    content: [
-                        {
+                    content: [{
+                        type: "text" as const,
+                        text: JSON.stringify(result.data, null, 2),
+                    }],
+                };
+            },
+        },
+
+        // ─── Tool 7: zotero-get-attachment-text ──────────────────────────
+        {
+            name: "zotero-get-attachment-text",
+            description: `Get the extracted full text content from PDF or HTML attachments of a Zotero item.
+Pass either a parent item key (to get text from all its attachments) or an attachment key directly.
+
+Requires Better BibTeX debug-bridge and ZOTERO_DEBUG_BRIDGE_TOKEN env var.`,
+            schema: z.object({
+                itemKey: z.string()
+                    .describe("Item key (parent item or attachment itself)"),
+                maxLength: z.number().default(50000)
+                    .describe("Max characters to return per attachment (default: 50000)"),
+            }),
+            handler: async ({ itemKey, maxLength }, ctx) => {
+                ctx.logger.info(`Getting attachment text for: ${itemKey}`);
+
+                const script = [
+                    `var libraryID = Zotero.Libraries.userLibraryID;`,
+                    `var itemID = Zotero.Items.getIDFromLibraryAndKey(libraryID, ${JSON.stringify(itemKey)});`,
+                    `if (!itemID) throw new Error('Item not found: ' + ${JSON.stringify(itemKey)});`,
+                    `var item = Zotero.Items.get(itemID);`,
+                    `var maxLen = ${maxLength};`,
+                    `var texts = [];`,
+                    `if (item.isAttachment()) {`,
+                    `  try {`,
+                    `    var text = await item.attachmentText;`,
+                    `    if (text) texts.push({ key: item.key, title: item.getField('title'),`,
+                    `      contentType: item.attachmentContentType,`,
+                    `      text: text.substring(0, maxLen), truncated: text.length > maxLen });`,
+                    `  } catch(e) { texts.push({ key: item.key, error: String(e) }); }`,
+                    `} else if (item.isRegularItem()) {`,
+                    `  var attIDs = item.getAttachments();`,
+                    `  for (var id of attIDs) {`,
+                    `    var att = Zotero.Items.get(id);`,
+                    `    var ct = att.attachmentContentType;`,
+                    `    if (ct==='application/pdf'||ct==='text/html'||ct==='text/plain') {`,
+                    `      try {`,
+                    `        var text = await att.attachmentText;`,
+                    `        if (text) texts.push({ key: att.key, title: att.getField('title'),`,
+                    `          contentType: ct, text: text.substring(0, maxLen), truncated: text.length > maxLen });`,
+                    `      } catch(e) { texts.push({ key: att.key, title: att.getField('title'), error: String(e) }); }`,
+                    `    }`,
+                    `  }`,
+                    `}`,
+                    `return texts;`,
+                ].join("\n");
+
+                const result = await debugBridgeFetch(script);
+
+                if (!result.ok) {
+                    return {
+                        content: [{
                             type: "text" as const,
-                            text: `Failed to add note. ${result.error || errorMsg}`,
+                            text: `Failed to get attachment text. ${bridgeErrorText(result)}`,
                             isError: true,
-                        },
-                    ],
+                        }],
+                    };
+                }
+
+                const texts = result.data as any[];
+                if (!texts || texts.length === 0) {
+                    return {
+                        content: [{
+                            type: "text" as const,
+                            text: `No text content found for item ${itemKey}.`,
+                        }],
+                    };
+                }
+
+                const parts = texts.map((t: any) => {
+                    if (t.error) return `## ${t.title || t.key}\nError: ${t.error}`;
+                    return `## ${t.title} (${t.key})\nType: ${t.contentType}${t.truncated ? " [TRUNCATED]" : ""}\n\n${t.text}`;
+                });
+
+                return {
+                    content: [{
+                        type: "text" as const,
+                        text: parts.join("\n\n---\n\n"),
+                    }],
+                };
+            },
+        },
+
+        // ─── Tool 8: zotero-execute ──────────────────────────────────────
+        {
+            name: "zotero-execute",
+            description: `Execute arbitrary JavaScript code in the Zotero process via Better BibTeX debug-bridge.
+The script runs as an async function body with full access to the Zotero JavaScript API.
+Use 'return' to send results back. The return value will be JSON-serialized.
+
+Available objects: Zotero, ZoteroPane (via Zotero.getActiveZoteroPane()), and all Zotero internals.
+
+Only use this tool when the other zotero-* tools don't cover the needed functionality.
+
+Requires Better BibTeX debug-bridge and ZOTERO_DEBUG_BRIDGE_TOKEN env var.`,
+            schema: z.object({
+                script: z.string()
+                    .describe("JavaScript code to execute in Zotero (async function body)"),
+                params: z.record(z.string(), z.string()).optional()
+                    .describe("Optional key-value params passed as URL query params (accessible via 'query' object in script)"),
+            }),
+            handler: async ({ script, params }, ctx) => {
+                ctx.logger.info(`Executing Zotero script (${script.length} chars)`);
+
+                const result = await debugBridgeFetch(script, params);
+
+                if (!result.ok) {
+                    return {
+                        content: [{
+                            type: "text" as const,
+                            text: `Script execution failed. ${bridgeErrorText(result)}`,
+                            isError: true,
+                        }],
+                    };
+                }
+
+                return {
+                    content: [{
+                        type: "text" as const,
+                        text: typeof result.data === "string"
+                            ? result.data
+                            : JSON.stringify(result.data, null, 2),
+                    }],
                 };
             },
         },
