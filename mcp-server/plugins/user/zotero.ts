@@ -288,6 +288,81 @@ function bridgeErrorText(result: { error?: string; status: number; data: unknown
     return `${result.error || `Status: ${result.status}`}\n${detail}`;
 }
 
+/**
+ * Pick specified fields from an object or array of objects.
+ * Supports dot-path for nested filtering:
+ *   - "key"           → top-level field
+ *   - "notes.key"     → in the nested 'notes' value, only keep 'key'
+ *   - "notes.tags.name" → 3-level deep filtering (recursive)
+ * If a parent appears both bare ("notes") and with children ("notes.key"),
+ * the children win (more specific filtering).
+ */
+function pickFields(data: unknown, fields?: string[]): unknown {
+    if (!fields || fields.length === 0) return data;
+
+    // Group: top-level only vs. nested (dot-path)
+    const topOnly = new Set<string>();       // fields with no children specified
+    const nested = new Map<string, string[]>();  // parent → child paths
+
+    for (const f of fields) {
+        const dot = f.indexOf(".");
+        if (dot === -1) {
+            // Only mark as top-only if no nested children already registered
+            if (!nested.has(f)) topOnly.add(f);
+        } else {
+            const parent = f.substring(0, dot);
+            const child = f.substring(dot + 1);
+            if (!nested.has(parent)) nested.set(parent, []);
+            nested.get(parent)!.push(child);
+            topOnly.delete(parent); // children override bare inclusion
+        }
+    }
+
+    const allKeys = new Set([...topOnly, ...nested.keys()]);
+
+    const pick = (obj: Record<string, unknown>): Record<string, unknown> => {
+        const out: Record<string, unknown> = {};
+        for (const key of allKeys) {
+            if (!(key in obj)) continue;
+            const childPaths = nested.get(key);
+            if (childPaths) {
+                // Recursively filter nested value
+                out[key] = pickFields(obj[key], childPaths);
+            } else {
+                out[key] = obj[key];
+            }
+        }
+        return out;
+    };
+
+    if (Array.isArray(data)) return data.map(item =>
+        typeof item === "object" && item !== null ? pick(item as Record<string, unknown>) : item
+    );
+    if (typeof data === "object" && data !== null) return pick(data as Record<string, unknown>);
+    return data;
+}
+
+/**
+ * Apply a JavaScript filter expression to data.
+ * For arrays: each element is passed as `item` and kept if the expression returns truthy.
+ * For objects: the object is passed as `item` and returned as-is or null.
+ * Example expressions:
+ *   "item.itemType === 'journalArticle'"
+ *   "item.date > '2023'"
+ *   "item.tags.some(t => t === 'important')"
+ */
+function applyFilter(data: unknown, filterExpr?: string): unknown {
+    if (!filterExpr) return data;
+    try {
+        const fn = new Function("item", `return (${filterExpr})`);
+        if (Array.isArray(data)) return data.filter(item => fn(item));
+        if (typeof data === "object" && data !== null) return fn(data) ? data : null;
+        return data;
+    } catch (e) {
+        throw new Error(`Invalid filter expression: ${String(e)}`);
+    }
+}
+
 /** Parse author strings into Zotero creator objects */
 function parseAuthors(
     authors: string[],
@@ -722,6 +797,10 @@ Requires Better BibTeX debug-bridge and ZOTERO_DEBUG_BRIDGE_TOKEN env var.`,
                     .describe("Date range end"),
                 limit: z.number().default(20)
                     .describe("Maximum number of results (default: 20)"),
+                fields: z.array(z.string()).optional()
+                    .describe("Fields to include in output (e.g. ['key','title','creators']). Returns all if not specified."),
+                filter: z.string().optional()
+                    .describe("JS expression to filter results. Each item is available as 'item'. E.g. \"item.itemType === 'book'\""),
             }),
             handler: async (params, ctx) => {
                 ctx.logger.info(`Searching Zotero: ${JSON.stringify(params)}`);
@@ -786,11 +865,15 @@ Requires Better BibTeX debug-bridge and ZOTERO_DEBUG_BRIDGE_TOKEN env var.`,
                 }
 
                 const items = result.data as any[];
+                const afterFilter = applyFilter(items, params.filter) as any[];
+                const afterPick = pickFields(afterFilter, params.fields);
+                const total = items.length;
+                const shown = afterFilter.length;
                 return {
                     content: [{
                         type: "text" as const,
-                        text: items.length > 0
-                            ? `Found ${items.length} item(s):\n\n${JSON.stringify(items, null, 2)}`
+                        text: shown > 0
+                            ? `Found ${total} item(s)${shown < total ? `, showing ${shown} after filter` : ``}:\n\n${JSON.stringify(afterPick, null, 2)}`
                             : `No items found matching the search criteria.`,
                     }],
                 };
@@ -811,8 +894,12 @@ Requires Better BibTeX debug-bridge and ZOTERO_DEBUG_BRIDGE_TOKEN env var.`,
                     .describe("Include child notes with their HTML content"),
                 includeAttachments: z.boolean().default(false)
                     .describe("Include attachment info (filename, type, path)"),
+                fields: z.array(z.string()).optional()
+                    .describe("Fields to include in output (e.g. ['key','title','DOI']). Returns all if not specified."),
+                filter: z.string().optional()
+                    .describe("JS expression to filter the result. The item is available as 'item'. E.g. \"item.date > '2020'\""),
             }),
-            handler: async ({ key, includeNotes, includeAttachments }, ctx) => {
+            handler: async ({ key, includeNotes, includeAttachments, fields, filter }, ctx) => {
                 ctx.logger.info(`Getting Zotero item: ${key}`);
 
                 const notesBlock = includeNotes ? [
@@ -872,10 +959,14 @@ Requires Better BibTeX debug-bridge and ZOTERO_DEBUG_BRIDGE_TOKEN env var.`,
                     };
                 }
 
+                const afterFilter = applyFilter(result.data, filter);
+                const afterPick = pickFields(afterFilter, fields);
                 return {
                     content: [{
                         type: "text" as const,
-                        text: JSON.stringify(result.data, null, 2),
+                        text: afterPick === null
+                            ? `Item ${key} did not match filter expression.`
+                            : JSON.stringify(afterPick, null, 2),
                     }],
                 };
             },
@@ -916,7 +1007,7 @@ Requires Better BibTeX debug-bridge and ZOTERO_DEBUG_BRIDGE_TOKEN env var.`,
                     `  for (var id of attIDs) {`,
                     `    var att = Zotero.Items.get(id);`,
                     `    var ct = att.attachmentContentType;`,
-                    `    if (ct==='application/pdf'||ct==='text/html'||ct==='text/plain') {`,
+                    `    if (ct==='application/pdf'||ct==='text/html'||ct==='text/plain'||ct==='text/markdown') {`,
                     `      try {`,
                     `        var text = await att.attachmentText;`,
                     `        if (text) texts.push({ key: att.key, title: att.getField('title'),`,
@@ -981,8 +1072,12 @@ Requires Better BibTeX debug-bridge and ZOTERO_DEBUG_BRIDGE_TOKEN env var.`,
                     .describe("JavaScript code to execute in Zotero (async function body)"),
                 params: z.record(z.string(), z.string()).optional()
                     .describe("Optional key-value params passed as URL query params (accessible via 'query' object in script)"),
+                fields: z.array(z.string()).optional()
+                    .describe("Fields to include in output. Filters the returned JSON to only include specified keys."),
+                filter: z.string().optional()
+                    .describe("JS expression to filter results. Each item is available as 'item'. E.g. \"item.tag === 'test'\""),
             }),
-            handler: async ({ script, params }, ctx) => {
+            handler: async ({ script, params, fields, filter }, ctx) => {
                 ctx.logger.info(`Executing Zotero script (${script.length} chars)`);
 
                 const result = await debugBridgeFetch(script, params);
@@ -997,12 +1092,14 @@ Requires Better BibTeX debug-bridge and ZOTERO_DEBUG_BRIDGE_TOKEN env var.`,
                     };
                 }
 
+                const afterFilter = applyFilter(result.data, filter);
+                const afterPick = pickFields(afterFilter, fields);
                 return {
                     content: [{
                         type: "text" as const,
-                        text: typeof result.data === "string"
-                            ? result.data
-                            : JSON.stringify(result.data, null, 2),
+                        text: typeof afterPick === "string"
+                            ? afterPick
+                            : JSON.stringify(afterPick, null, 2),
                     }],
                 };
             },
