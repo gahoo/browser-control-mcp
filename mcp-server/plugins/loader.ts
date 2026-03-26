@@ -9,6 +9,7 @@ import * as fs from "fs";
 import * as path from "path";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { PluginDefinition, PluginContext } from "./types";
+import type { ToolRegistry } from "../tool-registry";
 import { logger } from "../logger";
 
 /**
@@ -71,7 +72,8 @@ export async function loadPluginsFromDirectory(
 export async function registerPlugin(
     server: McpServer,
     plugin: PluginDefinition,
-    context: PluginContext
+    context: PluginContext,
+    toolRegistry?: ToolRegistry
 ): Promise<void> {
     // Call onLoad hook if defined
     if (plugin.onLoad) {
@@ -87,14 +89,19 @@ export async function registerPlugin(
     // Register each tool
     for (const tool of plugin.tools) {
         try {
+            const handler = async (params: unknown) => {
+                return await tool.handler(params as any, context);
+            };
             server.tool(
                 tool.name,
                 tool.description,
                 tool.schema.shape,
-                async (params: unknown) => {
-                    return await tool.handler(params as any, context);
-                }
+                handler
             );
+            // Also register in tool registry for programmatic invocation
+            if (toolRegistry) {
+                toolRegistry.register(tool.name, handler);
+            }
             logger.info(`Registered tool: ${tool.name} (from ${plugin.metadata.name})`);
         } catch (error) {
             logger.error(`Failed to register tool ${tool.name}`, { error: String(error) });
@@ -113,12 +120,13 @@ export async function registerPlugin(
 export async function loadAndRegisterPlugins(
     server: McpServer,
     pluginsDir: string,
-    context: PluginContext
+    context: PluginContext,
+    toolRegistry?: ToolRegistry
 ): Promise<PluginDefinition[]> {
     const plugins = await loadPluginsFromDirectory(pluginsDir);
 
     for (const plugin of plugins) {
-        await registerPlugin(server, plugin, context);
+        await registerPlugin(server, plugin, context, toolRegistry);
     }
 
     return plugins;

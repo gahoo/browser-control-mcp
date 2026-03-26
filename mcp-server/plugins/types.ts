@@ -26,6 +26,8 @@ export interface ToolResult {
 export interface PluginContext {
     browserApi: BrowserAPI;
     logger: typeof Logger;
+    /** Call any registered tool by name (used by macro executor and plugins) */
+    callTool: (name: string, params: Record<string, any>) => Promise<any>;
 }
 
 /**

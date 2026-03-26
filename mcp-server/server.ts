@@ -6,12 +6,31 @@ import { z } from "zod";
 import { BrowserAPI } from "./browser-api";
 import { logger } from "./logger";
 import { loadAndRegisterPlugins } from "./plugins";
+import { ToolRegistry } from "./tool-registry";
+import { parseMacroDefinition, executeMacro } from "./macro-executor";
 import * as path from "path";
 import * as fs from "fs/promises";
 import dayjs from "dayjs";
 import relativeTime from "dayjs/plugin/relativeTime";
 
 dayjs.extend(relativeTime);
+
+// Tool registry for programmatic tool invocation (used by macro executor)
+const toolRegistry = new ToolRegistry();
+
+/**
+ * Register a tool on both the MCP server and the internal tool registry.
+ * This wrapper ensures tools are callable programmatically by the macro executor.
+ */
+function registerTool(
+  name: string,
+  description: string,
+  schema: any,
+  handler: (params: any) => Promise<any>
+) {
+  mcpServer.tool(name, description, schema, handler);
+  toolRegistry.register(name, handler);
+}
 
 // Helper function to pick specific fields from an object
 function pickFields<T extends Record<string, any>>(obj: T, fields?: string[]): Partial<T> {
@@ -32,7 +51,7 @@ const mcpServer = new McpServer({
   version: "1.5.1",
 });
 
-mcpServer.tool(
+registerTool(
   "open-browser-tab",
   "Open a new tab in the user's browser, optionally in a specific tab group (use get-browser-tab-groups to find existing group IDs)",
   {
@@ -81,7 +100,7 @@ mcpServer.tool(
   }
 );
 
-mcpServer.tool(
+registerTool(
   "close-browser-tabs",
   "Close tabs in the user's browser by tab IDs",
   { tabIds: z.array(z.number()) },
@@ -93,7 +112,7 @@ mcpServer.tool(
   }
 );
 
-mcpServer.tool(
+registerTool(
   "get-list-of-open-tabs",
   `Get the list of open tabs in the user's browser.
   
@@ -192,7 +211,7 @@ Dump:
   }
 );
 
-mcpServer.tool(
+registerTool(
   "get-recent-browser-history",
   `Get the list of recent browser history.
   
@@ -287,7 +306,7 @@ Dump:
   }
 );
 
-mcpServer.tool(
+registerTool(
   "get-tab-web-content",
   `
     Get the full text content of the webpage and the list of links in the webpage, by tab ID. 
@@ -364,7 +383,7 @@ mcpServer.tool(
   }
 );
 
-mcpServer.tool(
+registerTool(
   "reorder-browser-tabs",
   "Change the order of open browser tabs",
   { tabOrder: z.array(z.number()) },
@@ -378,7 +397,7 @@ mcpServer.tool(
   }
 );
 
-mcpServer.tool(
+registerTool(
   "find-highlight-in-browser-tab",
   "Find and highlight text in a browser tab (use a query phrase that exists in the web content)",
   { tabId: z.number(), queryPhrase: z.string() },
@@ -395,7 +414,7 @@ mcpServer.tool(
   }
 );
 
-mcpServer.tool(
+registerTool(
   "group-browser-tabs",
   "Organize opened browser tabs in a tab group. If groupId is provided, tabs will be added to that existing group; otherwise a new group will be created.",
   {
@@ -445,7 +464,7 @@ mcpServer.tool(
   }
 );
 
-mcpServer.tool(
+registerTool(
   "get-browser-tab-groups",
   "Get the list of existing tab groups in the user's browser",
   {},
@@ -465,7 +484,7 @@ mcpServer.tool(
   }
 );
 
-mcpServer.tool(
+registerTool(
   "switch-to-tab",
   "Switch to (activate) a specific browser tab by its tab ID. This will bring the tab to the foreground.",
   {
@@ -484,7 +503,7 @@ mcpServer.tool(
   }
 );
 
-mcpServer.tool(
+registerTool(
   "rename-tab-group",
   "Rename an existing tab group by its group ID. Use get-browser-tab-groups to find existing group IDs.",
   {
@@ -504,7 +523,7 @@ mcpServer.tool(
   }
 );
 
-mcpServer.tool(
+registerTool(
   "delete-tab-group",
   "Delete a tab group by its group ID. The tabs in the group will be ungrouped (not closed). Use get-browser-tab-groups to find existing group IDs.",
   {
@@ -523,7 +542,7 @@ mcpServer.tool(
   }
 );
 
-mcpServer.tool(
+registerTool(
   "query-open-tabs",
   `Search/filter open tabs with flexible query options. Use 'active: true, currentWindow: true' to get the current tab.
 
@@ -633,7 +652,7 @@ Dump:
   }
 );
 
-mcpServer.tool(
+registerTool(
   "get-clickable-elements",
   `Get a list of clickable elements (links and buttons).
   
@@ -735,7 +754,7 @@ Dump:
   }
 );
 
-mcpServer.tool(
+registerTool(
   "click-element",
   "Click an element on a web page. Supports matching by textContent (partial match), CSS selector, or XPath. Use index when multiple elements match.",
   {
@@ -762,7 +781,7 @@ mcpServer.tool(
   }
 );
 
-mcpServer.tool(
+registerTool(
   "execute-script",
   "Execute arbitrary JavaScript code on a web page. Can be either an inline script or an absolute path (starting with / or ~) to a local .js/.mjs/.cjs file.",
   {
@@ -813,7 +832,7 @@ mcpServer.tool(
   }
 );
 
-mcpServer.tool(
+registerTool(
   "get-tab-markdown-content",
   `Get clean, LLM-friendly Markdown content from a webpage. Uses Defuddle to extract 
    the main content (removing clutter like ads, navigation, etc.) and returns structured 
@@ -961,7 +980,7 @@ mcpServer.tool(
   }
 );
 
-mcpServer.tool(
+registerTool(
   "scroll-page",
   `Scroll a web page in a browser tab.
    
@@ -1002,7 +1021,7 @@ mcpServer.tool(
   }
 );
 
-mcpServer.tool(
+registerTool(
   "reload-browser-tab",
 
   "Reload/refresh a browser tab by tab ID. Useful for refreshing page content after changes or when content needs to be updated.",
@@ -1023,7 +1042,7 @@ mcpServer.tool(
   }
 );
 
-mcpServer.tool(
+registerTool(
   "install-media-interceptor",
   `Install media interception hooks into a browser tab to capture video, audio, and streaming resources.
 
@@ -1063,7 +1082,7 @@ After installing, use get-tab-media-resources to retrieve captured URLs.`,
   }
 );
 
-mcpServer.tool(
+registerTool(
   "get-tab-media-resources",
   `Retrieve media resource URLs captured by a previously installed interceptor.
 
@@ -1133,7 +1152,7 @@ Dump:
   }
 );
 
-mcpServer.tool(
+registerTool(
   "fetch-url",
   `Download content from a URL. Supports images, PDFs, audio, video, and other binary files.
 
@@ -1346,7 +1365,7 @@ Download Method:
   }
 );
 
-mcpServer.tool(
+registerTool(
   "take-snapshot",
   `Take a snapshot (screenshot) of a specific element on a web page.
    
@@ -1409,7 +1428,7 @@ mcpServer.tool(
   }
 );
 
-mcpServer.tool(
+registerTool(
   "is-tab-loaded",
   "Check if a browser tab is fully loaded.",
   {
@@ -1428,7 +1447,7 @@ mcpServer.tool(
   }
 );
 
-mcpServer.tool(
+registerTool(
   "find-element",
   `Find elements on a webpage using CSS selectors, XPath, text content, or Regular Expression. Returns JSON list of found elements with their 0-based index which can be used with click-element.
 
@@ -1505,7 +1524,7 @@ Dump:
   }
 );
 
-mcpServer.tool(
+registerTool(
   "type-text",
   "Input text into a form field or editable element. Supports matching by CSS selector, XPath, or index from find-element.",
   {
@@ -1523,7 +1542,7 @@ mcpServer.tool(
   }
 );
 
-mcpServer.tool(
+registerTool(
   "press-key",
   "Simulate a single key press (e.g., 'Enter', 'Tab', 'Escape') on a specific element. Use this for submitting forms or triggering keyboard shortcuts.",
   {
@@ -1538,6 +1557,93 @@ mcpServer.tool(
     return {
       content: [{ type: "text", text: `Pressed key: ${key}` }],
     };
+  }
+);
+
+registerTool(
+  "execute-macro",
+  `Execute a macro (workflow) defined in YAML or JSON. A macro is a sequence of steps that call MCP tools or built-in commands.
+
+Macro definition format (YAML):
+  name: "my-workflow"
+  steps:
+    - tool: "tool-name"
+      params: { key: "{{input.value}}" }
+      output: "step1"
+    - builtin: "delay"
+      params: { ms: 2000 }
+    - tool: "another-tool"
+      params: { data: "{{step1.field}}" }
+      condition: "{{step1.success}}"
+      onError: "skip"
+
+Features:
+- Variables: Use {{input.xxx}} for macro input, {{stepOutput.field}} for previous step results
+- Built-ins: "delay" (params: ms), "wait-for-element" (params: tabId, selector/xpath/text, timeout)
+- Conditions: Steps with "condition" are skipped if the condition resolves to falsy
+- Error handling: "onError" per step — "stop" (default), "skip", or "continue"
+- Recursion: A macro can call execute-macro to run sub-macros (max depth: 10)`,
+  {
+    definition: z.string().optional().describe("Macro definition as YAML or JSON string"),
+    definitionFile: z.string().optional().describe("Path to a YAML/JSON macro definition file"),
+    input: z.record(z.string(), z.any()).optional().describe("Input parameters accessible via {{input.xxx}} in the macro"),
+  },
+  async ({ definition, definitionFile, input }) => {
+    try {
+      let macroDef;
+
+      if (definition) {
+        macroDef = parseMacroDefinition(definition);
+      } else if (definitionFile) {
+        const content = await fs.readFile(definitionFile, "utf-8");
+        macroDef = parseMacroDefinition(content);
+      } else {
+        return {
+          content: [{ type: "text", text: "Error: must provide either 'definition' or 'definitionFile'", isError: true }],
+        };
+      }
+
+      const result = await executeMacro(macroDef, input || {}, toolRegistry);
+
+      // Format execution summary
+      const summary = [
+        `Macro "${macroDef.name || "unnamed"}" ${result.success ? "completed" : "failed"}`,
+        `Steps: ${result.stepsExecuted} executed, ${result.stepsSkipped} skipped`,
+      ];
+
+      if (result.error) {
+        summary.push(`Error: ${result.error}`);
+      }
+
+      // Add step log
+      const logLines = result.log.map((entry) => {
+        const statusIcon = entry.status === "success" ? "✓" : entry.status === "skipped" ? "○" : "✗";
+        let line = `  ${statusIcon} [${entry.index}] ${entry.name} (${entry.durationMs}ms)`;
+        if (entry.error) line += ` — ${entry.error}`;
+        return line;
+      });
+
+      summary.push("\nExecution log:");
+      summary.push(...logLines);
+
+      // Add outputs
+      if (Object.keys(result.outputs).length > 0) {
+        summary.push("\nOutputs:");
+        summary.push(JSON.stringify(result.outputs, null, 2));
+      }
+
+      return {
+        content: [{
+          type: "text",
+          text: summary.join("\n"),
+          ...(result.success ? {} : { isError: true }),
+        }],
+      };
+    } catch (err) {
+      return {
+        content: [{ type: "text", text: `Macro execution error: ${err instanceof Error ? err.message : String(err)}`, isError: true }],
+      };
+    }
   }
 );
 
@@ -1620,7 +1726,8 @@ async function initialize() {
 
     // Load user plugins
     const pluginsDir = path.join(__dirname, "plugins", "user");
-    await loadAndRegisterPlugins(mcpServer, pluginsDir, { browserApi, logger });
+    const callTool = (name: string, params: Record<string, any>) => toolRegistry.call(name, params);
+    await loadAndRegisterPlugins(mcpServer, pluginsDir, { browserApi, logger, callTool }, toolRegistry);
 
     if (transportMode === "http") {
       // --- Streamable HTTP transport (supports multiple agents) ---
