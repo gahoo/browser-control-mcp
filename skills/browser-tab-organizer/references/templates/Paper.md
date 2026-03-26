@@ -55,10 +55,10 @@ code_link: "{{code_link}}"
 
 ### 4.1 核心思路与逻辑流图 (Core Idea & Logic Mapping)
 - **整体机制还原 (Comprehensive Mechanism)**:
-  > **要求**: 必须完整还原作者“提出问题 -> 数学/逻辑抽象 -> 核心干预/算法设计 -> 最终闭环”的完整思路。不要简单堆砌名词，要讲清楚**“数据是怎么流动的，损失是怎么计算的，逻辑是怎么自洽的”**。
-  - **阶段 1 (如：输入与预处理)**: {{mechanism_phase_1}}
-  - **阶段 2 (如：核心算子/干预逻辑)**: {{mechanism_phase_2}}
-  - **阶段 3 (如：反馈/损失/输出)**: {{mechanism_phase_3}}
+  > **要求**: 必须深度还原论文的**核心逻辑推导过程**。重点在于揭示作者如何将原始假设通过一系列关键步骤转化为最终结论。
+  > **指导原则**: 请根据论文实际情况，动态列出 1～N 个关键逻辑节点。每一个节点都应包含：**“该阶段的逻辑输入 -> 核心处理与干预 -> 该阶段产生的关键支撑/输出”**。不要简单罗列名词，要体现出因果推论的闭环。
+  
+  {{dynamic_logic_chain}} # [AI 应在此按逻辑演进动态填充 N 个逻辑节点，体现深度推导过程]
 - **逻辑流图 (Mermaid)**:
 *（注：仅针对复杂文章）
 > **🤖 绘图指令**: 必须首先 `activate_skill(name: "mermaid-visualizer")` 以获取专业绘图准则。
@@ -67,7 +67,13 @@ code_link: "{{code_link}}"
 > 2. **结构隔离**: 逻辑复杂的文章必须使用 `subgraph` 区分不同的阶段（例如：区分 `子图: 预训练阶段` 与 `子图: 下游微调阶段`，或 `子图: 体外细胞实验` 与 `子图: 体内动物验证`）。
 {{mermaid_charts}}
 
-### 4.2 领域技术细节 (Domain-Specific Technicals)
+### 4.2 核心概念与关键方法解析 (Key Concepts & Methodological Breakdown)
+- **新提概念与术语 (New Concepts/Terms)**:
+  - **{{concept_name}}**: {{concept_definition}} # 对论文中提出的核心新名词、模型组件、或跨学科术语给出直通本质的定义与直觉 (Intuition)。
+- **核心算子与干预逻辑 (Core Operators/Methods)**:
+  - **{{method_name}}**: {{method_explanation}} # 深入剖析该方法/算法的具体工作机制，它是如何作用于核心对象并解决上述痛点的？
+
+### 4.3 领域技术细节 (Domain-Specific Technicals)
 *(注：根据论文所属领域保留对应区块，其余彻底删除。必须提供深度的技术分析，而非简单的术语罗列)*
 
 #### 🤖 [AI & 算法架构]
