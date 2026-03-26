@@ -29,10 +29,12 @@ Follow the [Academic Paper Archival](academic-papers.md) workflow, but with thes
 1. **Focus**: `switch-to-tab(tabId)`.
 2. **Version Control (Auto-Update)**: 
    - **Action**: Use `find-element(mode: "css", query: "a", filter: { text: "View current version of this article" })` to check for newer versions.
-   - **Automation**: If a match is found, click the link (`click-element`) to navigate to the most recent version of the article before proceeding with archival.
+   - **Automation**: If a match is found, click the link (`click-element`).
+   - **Constraint (Load-First)**: **MUST** use `is-tab-loaded` iteratively until it returns `true` before proceeding to any subsequent UI interaction.
 3. **Full-Text Navigation**:
    - **Requirement**: For full-text archival in Obsidian, ensure you are on the page ending in **`.full-text`**. 
    - **Action (Primary)**: Use `find-element(mode: "css", query: "a", filter: { text: "Full Text" })` to locate the link, then use **`click-element`** to navigate.
+   - **Constraint (Load-First)**: **MUST** use `is-tab-loaded` iteratively until it returns `true` before initiating extraction or further DOM analysis.
    - **Action (Fallback)**: If the link is not found or clicking fails, use **URL Construction** (appending `.full-text`) and navigate via `execute-script`.
 4. **Extraction**: Use `get-tab-markdown-content` for the content.
 5. **Zotero Save**:
