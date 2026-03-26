@@ -12,6 +12,7 @@
 
 import * as YAML from "yaml";
 import * as fs from "fs/promises";
+import * as path from "path";
 import { ToolRegistry } from "./tool-registry";
 import { logger } from "./logger";
 
@@ -412,17 +413,39 @@ async function handleRecursiveMacroCall(
     registry: ToolRegistry,
     currentDepth: number
 ): Promise<any> {
-    let definition: MacroDefinition;
+    if (!params.definition) {
+        throw new Error("execute-macro: missing 'definition' parameter");
+    }
 
-    if (params.definition) {
-        definition = parseMacroDefinition(params.definition);
-    } else if (params.definitionFile) {
-        const content = await fs.readFile(params.definitionFile, "utf-8");
-        definition = parseMacroDefinition(content);
+    let macroContent = params.definition;
+
+    // Check if definition is potentially a file path
+    if (typeof macroContent === 'string' && (macroContent.startsWith('/') || macroContent.startsWith('~/')) && /\.(yaml|yml|json)$/i.test(macroContent)) {
+        try {
+            let filePath = macroContent;
+            if (filePath.startsWith('~/')) {
+                const homeDir = process.env.HOME || process.env.USERPROFILE || '';
+                filePath = path.join(homeDir, filePath.slice(2));
+            }
+            const stats = await fs.stat(filePath);
+            if (stats.isFile()) {
+                macroContent = await fs.readFile(filePath, "utf-8");
+                logger.debug(`Loaded macro definition from file: ${filePath}`);
+            }
+        } catch (e) {
+            const err = e as NodeJS.ErrnoException;
+            if (err.code !== 'ENOENT') {
+                throw new Error(`execute-macro: error reading macro file ${macroContent}: ${String(e)}`);
+            }
+        }
+    }
+
+    let definition: MacroDefinition;
+    // definition might already be parsed if embedded directly in JSON/YAML (though the schema expects a string, it can happen)
+    if (typeof macroContent === "string") {
+        definition = parseMacroDefinition(macroContent);
     } else {
-        throw new Error(
-            "execute-macro: must provide either 'definition' or 'definitionFile'"
-        );
+        definition = macroContent as MacroDefinition;
     }
 
     const subInput = params.input || {};

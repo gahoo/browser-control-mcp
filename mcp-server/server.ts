@@ -1584,24 +1584,45 @@ Features:
 - Error handling: "onError" per step — "stop" (default), "skip", or "continue"
 - Recursion: A macro can call execute-macro to run sub-macros (max depth: 10)`,
   {
-    definition: z.string().optional().describe("Macro definition as YAML or JSON string"),
-    definitionFile: z.string().optional().describe("Path to a YAML/JSON macro definition file"),
+    definition: z.string().describe("Macro definition as YAML/JSON string, or absolute path to a local YAML/JSON file"),
     input: z.record(z.string(), z.any()).optional().describe("Input parameters accessible via {{input.xxx}} in the macro"),
   },
-  async ({ definition, definitionFile, input }) => {
+  async ({ definition, input }) => {
     try {
-      let macroDef;
+      let macroContent = definition;
 
-      if (definition) {
-        macroDef = parseMacroDefinition(definition);
-      } else if (definitionFile) {
-        const content = await fs.readFile(definitionFile, "utf-8");
-        macroDef = parseMacroDefinition(content);
-      } else {
+      // Check if definition is potentially a file path
+      if ((definition.startsWith('/') || definition.startsWith('~/')) && /\.(yaml|yml|json)$/i.test(definition)) {
+        try {
+          let filePath = definition;
+          if (filePath.startsWith('~/')) {
+            const homeDir = process.env.HOME || process.env.USERPROFILE || '';
+            filePath = path.join(homeDir, filePath.slice(2));
+          }
+          const stats = await fs.stat(filePath);
+          if (stats.isFile()) {
+            macroContent = await fs.readFile(filePath, "utf-8");
+            logger.debug(`Loaded macro definition from file: ${filePath}`);
+          }
+        } catch (e) {
+          const err = e as NodeJS.ErrnoException;
+          if (err.code !== 'ENOENT') {
+            return {
+              content: [{ type: "text", text: `Error reading macro file ${definition}: ${String(e)}`, isError: true }],
+            };
+          }
+        }
+      }
+
+      let macroDef;
+      try {
+        macroDef = parseMacroDefinition(macroContent);
+      } catch (e) {
         return {
-          content: [{ type: "text", text: "Error: must provide either 'definition' or 'definitionFile'", isError: true }],
+          content: [{ type: "text", text: `Error parsing macro definition: ${String(e)}`, isError: true }],
         };
       }
+
 
       const result = await executeMacro(macroDef, input || {}, toolRegistry);
 
