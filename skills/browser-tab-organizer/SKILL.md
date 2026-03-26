@@ -48,10 +48,12 @@ Before starting the processing phase, **ASK the user** which execution mode they
 
 - **Option D: Asynchronous Pipeline Archival Mode (MAX THROUGHPUT)**
   - Use when processing a large queue of structured resources (e.g., bioRxiv, GitHub).
-  - **Logic**: Decouples "Input" from "Processing" by running parallel subagents in overlapping turns to maximize throughput.
-  - **Stage 1 (Operator-Extractor)**: One subagent handles browser navigation (Load-First), image activation, and `dump`s full-text to a local Markdown file (standardized as `{{url_basename}}_fulltext.md`).
-  - **Stage 2 (Architect-Archivist)**: While the Operator-Extractor moves to the next tab in the queue, a second subagent reads the local file, performs deep analysis (Mermaid auditing), and executes dual-archival (Obsidian & Zotero).
-  - **Execution**: The Main Agent orchestrates these parallel stages across turns, ensuring the processing of Tab N happens concurrently with the extraction of Tab N+1.
+  - **Logic**: Decouples "Input" from "Processing" by running parallel subagents or macros in overlapping turns to maximize throughput.
+  - **Stage 1 (Operator-Extractor)**:
+    - **Primary**: Use `execute-macro` with a site-specific definition file (e.g., `scripts/biorxiv-standard-extractor.macro.yaml`) to handle navigation (Load-First), image activation, and `dump` full-text.
+    - **Fallback**: If the macro fails or is unavailable, revert to sequential manual steps (as defined in site-specific guides).
+  - **Stage 2 (Architect-Archivist)**: While Stage 1 moves to the next tab in the queue, a second subagent reads the local file, performs deep analysis (Mermaid auditing), and executes dual-archival (Obsidian & Zotero).
+  - **Execution**: The Main Agent orchestrates these parallel stages across turns, ensuring the processing of Tab N happens concurrently with the macro-driven extraction of Tab N+1.
 
 ---
 

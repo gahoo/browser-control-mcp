@@ -24,26 +24,28 @@ When constructing a new URL from the current tab URL:
 2.  Append the target suffix (`.full-text` for HTML extraction or `.full.pdf` for Zotero attachment).
 
 ## 3. Archival Workflow
-Follow the [Academic Paper Archival](academic-papers.md) workflow, but with these specific enhancements:
+Follow the [Academic Paper Archival](academic-papers.md) workflow.
 
-1. **Focus**: `switch-to-tab(tabId)`.
-2. **Version Control (Auto-Update)**: 
-   - **Action**: Use `find-element(mode: "css", query: "a", filter: { text: "View current version of this article" })` to check for newer versions.
-   - **Automation**: If a match is found, click the link (`click-element`).
-   - **Constraint (Load-First)**: **MUST** use `is-tab-loaded` iteratively until it returns `true` before proceeding to any subsequent UI interaction.
-3. **Full-Text Navigation**:
-   - **Requirement**: For full-text archival in Obsidian, ensure you are on the page ending in **`.full-text`**. 
-   - **Action (Primary)**: Use `find-element(mode: "css", query: "a", filter: { text: "Full Text" })` to locate the link, then use **`click-element`** to navigate.
-   - **Constraint (Load-First)**: **MUST** use `is-tab-loaded` iteratively until it returns `true` before initiating extraction or further DOM analysis.
-   - **Action (Fallback)**: If the link is not found or clicking fails, use **URL Construction** (appending `.full-text`) and navigate via `execute-script`.
-4. **Extraction**: Use `get-tab-markdown-content` for the content.
-5. **Zotero Save**:
-   - Use `save-url-to-zotero`.
-   - **attachmentUrls**: 
-     - URL: Ensure it ends in **`.full.pdf`** (stripping `.full-text` if present before appending).
-     - Type: `file`.
-   - **downloadMethod**: `browser`.
-4. **Metadata**: Ensure `itemType: "preprint"` and `publicationTitle: "bioRxiv"`.
+### 3.1 Operator-Extractor Stage
+Choose the appropriate method based on the execution mode:
+
+- **Method A: Macro-driven (Recommended for Option D)**
+  - **Action**: Use `execute-macro` with `definitionFile: "scripts/biorxiv-standard-extractor.macro.yaml"`.
+  - **Inputs**: Pass `tabId` and `savePath` (e.g., `<tmp_dir>/{{url_basename}}_fulltext.md`).
+- **Method B: Manual Steps (Primary for Modes A/B/C or Fallback)**
+  1. **Focus**: `switch-to-tab(tabId)`.
+  2. **Version Control**: `click-element` for "View current version of this article" (if exists) -> MUST poll `is-tab-loaded`.
+  3. **Full-Text Navigation**:
+     - **Primary**: `click-element` for "Full Text" -> MUST poll `is-tab-loaded`.
+     - **Fallback**: URL Construction (append `.full-text`) -> `execute-script`.
+  4. **Image Activation**: `execute-script` to sync `data-src` to `src`.
+  5. **Extraction**: Use `get-tab-markdown-content` with `dump`.
+
+### 3.2 Architect-Archivist Stage
+1. **Analyze**: Use `read_file` on the local source.
+2. **Dual-Sync**: 
+   - **Zotero**: Use `save-url-to-zotero`. Attach `.full.pdf` and the **local Markdown file** (type: `file`). Set `itemType: "preprint"`, `publicationTitle: "bioRxiv"`.
+   - **Obsidian**: Follow `Paper.md` template rules.
 
 ## 4. Cleanup
 - Close the tab immediately after Zotero confirms `uploaded: 1`.

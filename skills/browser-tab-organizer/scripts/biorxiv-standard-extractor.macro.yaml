@@ -1,0 +1,39 @@
+name: "biorxiv-standard-extractor"
+steps:
+  - name: "Auto-Update Version"
+    tool: "click-element"
+    params:
+      tabId: "{{input.tabId}}"
+      textContent: "View current version of this article"
+    onError: "skip"
+  
+  - builtin: "delay"
+    params: { ms: 2500 }
+  - tool: "is-tab-loaded"
+    params: { tabId: "{{input.tabId}}" }
+
+  - name: "Wait for Full Text tab"
+    builtin: "wait-for-element"
+    params:
+      tabId: "{{input.tabId}}"
+      text: "Full Text"
+      timeout: 8000
+  - tool: "click-element"
+    params:
+      tabId: "{{input.tabId}}"
+      textContent: "Full Text"
+
+  - builtin: "delay"
+    params: { ms: 3000 }
+  - tool: "is-tab-loaded"
+    params: { tabId: "{{input.tabId}}" }
+
+  - tool: "execute-script"
+    params: 
+      tabId: "{{input.tabId}}"
+      script: "document.querySelectorAll('img[data-src]').forEach(img => { img.src = img.getAttribute('data-src'); });"
+  
+  - tool: "get-tab-markdown-content"
+    params:
+      tabId: "{{input.tabId}}"
+      dump: "{{input.savePath}}"
