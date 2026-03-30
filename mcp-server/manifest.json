@@ -82,6 +82,10 @@
         {
             "name": "find-highlight-in-browser-tab",
             "description": "Find and highlight text in a browser tab"
+        },
+        {
+            "name": "navigate-url",
+            "description": "Navigate an existing browser tab to a new URL"
         }
     ]
 }

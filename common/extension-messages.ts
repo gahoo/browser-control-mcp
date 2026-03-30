@@ -256,6 +256,11 @@ export interface PageScrolledExtensionMessage extends ExtensionMessageBase {
   viewportHeight: number;
 }
 
+export interface TabNavigatedExtensionMessage extends ExtensionMessageBase {
+  resource: "tab-navigated";
+  tabId: number;
+}
+
 export interface RunPromptExtensionMessage extends ExtensionMessageBase {
   resource: "run-prompt-request";
   prompt: string;
@@ -292,6 +297,7 @@ export type ExtensionMessage =
   | TabGroupRenamedExtensionMessage
   | TabGroupDeletedExtensionMessage
   | PageScrolledExtensionMessage
+  | TabNavigatedExtensionMessage
   | RunPromptExtensionMessage
   | GetServerStatusExtensionMessage;
 

@@ -504,6 +504,26 @@ registerTool(
 );
 
 registerTool(
+  "navigate-url",
+  "Navigate an existing browser tab to a new URL. This updates the current tab instead of opening a new one.",
+  {
+    tabId: z.number().describe("The tab ID to navigate"),
+    url: z.string().describe("The URL to navigate to"),
+  },
+  async ({ tabId, url }) => {
+    await browserApi.navigateUrl(tabId, url);
+    return {
+      content: [
+        {
+          type: "text",
+          text: `Tab ${tabId} navigated to ${url}`,
+        },
+      ],
+    };
+  }
+);
+
+registerTool(
   "rename-tab-group",
   "Rename an existing tab group by its group ID. Use get-browser-tab-groups to find existing group IDs.",
   {

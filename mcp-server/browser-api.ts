@@ -529,6 +529,15 @@ export class BrowserAPI {
     await this.waitForResponse(correlationId, "tab-switched");
   }
 
+  async navigateUrl(tabId: number, url: string): Promise<void> {
+    const correlationId = this.sendMessageToExtension({
+      cmd: "navigate-url",
+      tabId,
+      url,
+    });
+    await this.waitForResponse(correlationId, "tab-navigated");
+  }
+
   async renameTabGroup(groupId: string, newTitle: string): Promise<void> {
     const correlationId = this.sendMessageToExtension({
       cmd: "rename-tab-group",

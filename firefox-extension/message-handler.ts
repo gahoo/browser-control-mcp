@@ -138,6 +138,9 @@ export class MessageHandler {
       case "scroll-page":
         await this.scrollPage(req.correlationId, req.tabId, req.distance, req.unit, req.selector);
         break;
+      case "navigate-url":
+        await this.navigateUrl(req.correlationId, req.tabId, req.url);
+        break;
       case "run-prompt-result":
         this.handleRunPromptResult(req as RunPromptResultServerMessage); // Cast needed as req is ServerMessageRequest
         break;
@@ -239,6 +242,32 @@ export class MessageHandler {
       resource: "opened-tab-id",
       correlationId,
       tabId: tab.id,
+    });
+  }
+
+  private async navigateUrl(correlationId: string, tabId: number, url: string): Promise<void> {
+    // Allow https:// and specific protocol handlers like obsidian://
+    const allowedProtocols = ["https://", "obsidian://"];
+    const isAllowedProtocol = allowedProtocols.some(protocol => url.startsWith(protocol));
+
+    if (!isAllowedProtocol) {
+      console.error("[MessageHandler] Invalid URL - must start with https:// or a supported protocol:", url);
+      throw new Error("Invalid URL");
+    }
+
+    // Only check deny list for https URLs (protocol handlers don't have domains)
+    if (url.startsWith("https://") && await isDomainInDenyList(url)) {
+      console.warn("[MessageHandler] URL domain in deny list:", url);
+      throw new Error("Domain in user defined deny list");
+    }
+
+    console.log("[MessageHandler] Navigating tab to URL:", { tabId, url });
+    await browser.tabs.update(tabId, { url });
+
+    await this.client.sendResourceToServer({
+      resource: "tab-navigated",
+      correlationId,
+      tabId,
     });
   }
 

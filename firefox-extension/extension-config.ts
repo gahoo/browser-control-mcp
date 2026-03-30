@@ -149,6 +149,11 @@ export const AVAILABLE_TOOLS: ToolInfo[] = [
     id: "scroll-page",
     name: "Scroll Page",
     description: "Allows the MCP server to scroll web pages up, down, or to bottom"
+  },
+  {
+    id: "navigate-url",
+    name: "Navigate URL",
+    description: "Allows the MCP server to navigate the current tab to a new URL"
   }
 ];
 
@@ -181,6 +186,7 @@ export const COMMAND_TO_TOOL_ID: Record<ServerMessageRequest["cmd"], string> = {
   "rename-tab-group": "rename-tab-group",
   "delete-tab-group": "delete-tab-group",
   "scroll-page": "scroll-page",
+  "navigate-url": "navigate-url",
   "run-prompt-result": "internal-core", // Internal system command
   "server-status": "internal-core", // Internal system command
 };

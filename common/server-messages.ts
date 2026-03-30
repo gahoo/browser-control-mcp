@@ -222,7 +222,11 @@ export interface ScrollPageServerMessage extends ServerMessageBase {
   selector?: string;  // CSS selector to scroll to. When provided, distance/unit are ignored.
 }
 
-
+export interface NavigateUrlServerMessage extends ServerMessageBase {
+  cmd: "navigate-url";
+  tabId: number;
+  url: string;
+}
 
 export interface RunPromptResultServerMessage extends ServerMessageBase {
   cmd: "run-prompt-result";
@@ -269,6 +273,7 @@ export type ServerMessage =
   | RenameTabGroupServerMessage
   | DeleteTabGroupServerMessage
   | ScrollPageServerMessage
+  | NavigateUrlServerMessage
   | ServerStatusServerMessage;
 
 export type ServerMessageRequest = ServerMessage & { correlationId: string };
