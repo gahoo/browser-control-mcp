@@ -165,7 +165,28 @@ Both agents MUST follow these rules during the execution phase:
 - **Consult**: **ONLY** if a significant optimization is identified, present the findings to the user and ask for confirmation to update the Skill.
 - **Principle of Minimum Change**: When updating the Skill, apply only the most critical or significant changes. Avoid modifications where the meaning remains substantially the same or the impact is negligible.
 
-### 5. Final Cleanup
+### 5. Sub-agent Pipeline Discipline
+
+- **Mandatory Tab Focusing**:
+  - Before any browser-based interaction, extraction, or value assessment (Evaluator/Extractor phases), the sub-agent MUST call `switch-to-tab(tabId)` to ensure the target page is in focus and its content scripts are active.
+
+- **Mandatory Reference Loading**: 
+  - Sub-agents MUST call `read_file` to load the relevant site/field guides (e.g., `references/sites/academic-papers.md`) before performing any "Architect-Archivist" tasks. 
+  - **Goal**: Ensure the sub-agent is aware of site-specific logic and specialized formatting rules (like Mermaid validation) before processing.
+
+- **Token Protection (File-Based Data Flow)**:
+  - The **Extractor/Evaluator Agent** MUST use the `dump` parameter of `get-tab-markdown-content` for any full-text extraction. 
+  - **Constraint**: DO NOT return full-text content as a string variable in tool output. Pass only the **physical file path** to the main agent.
+  - The **Archivist Agent** then reads this file directly, preserving the main agent's context window.
+
+- **Descriptive Status Reporting**:
+  - Sub-agents MUST report their progress and findings in clear, natural language (e.g., "High Value identified; full text already available and dumped to [path]"). 
+
+- **Strict File Naming**:
+  - When saving an Obsidian note, the filename MUST be the paper's full title.
+  - **MANDATORY**: Any colons (`:`) in the title MUST be replaced with a middle dot (`·`) to ensure file system compatibility (e.g., "Title: Subtitle" -> "Title · Subtitle.md"). 
+
+### 6. Final Cleanup
 - Re-verify tab groups. Close source tabs once resources are extracted.
 
 ## Utilities

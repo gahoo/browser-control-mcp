@@ -20,15 +20,18 @@ Follow these steps strictly for each scholarly tab:
 
 1. **Focus**: ALWAYS run `switch-to-tab(tabId)` before processing.
 2. **Value Assessment (Abstract Audit)**:
-   - **Action**: Extract abstract using `get-tab-markdown-content`.
-   - **Autonomous Categorization**: AI analyzes the abstract to determine the paper's significance and relevance based on the research field and core contribution.
+   - **Adaptive Extraction**: The Evaluator Agent MUST adjust its strategy based on the page context:
+     - **Abstract/Summary Page**: Use `get-tab-markdown-content` (no `cssSelector`).
+     - **Full-Text Page**: MUST use `cssSelector: ".abstract"` to surgically extract the summary for initial evaluation.
    - **Decision Branch**:
      - **High Value (AI Determined)**:
-       - **Action**: Proceed **AUTOMATICALLY** to full archival without waiting for user confirmation.
-       - **Steps**:
+       - **Action**: Proceed **AUTOMATICALLY** to full archival.
+       - **Efficiency Rule**: If the Evaluator is already on a Full-Text page and identifies **High Value**, it should perform the full `dump` immediately. The presence of this dump file informs the main agent to proceed directly to the Archival stage.
+       - **Steps (if not already dumped)**:
          1. **Full-Text Navigation**: Navigate to the **Full Text** HTML view (e.g., append `.full-text` for bioRxiv).
-         2. **Deep Analysis**: Perform logic mapping and methodology audit.
-         3. **Full Archival**: Populate the complete **`Paper.md`** template.
+         2. **Full-Text Extraction**: Use `get-tab-markdown-content` with `dump`.
+         3. **Deep Analysis**: Perform logic mapping and methodology audit using the dumped file.
+         4. **Full Archival**: Populate the complete **`Paper.md`** template.
             - **Rigor Mandate**: The AI MUST NOT output brief gists or shallow summaries. Every single field and placeholder in the template must be populated with **extreme depth, exhaustive detail, and critical analytical rigor**, acting as a senior peer reviewer. If the original text is complex, break it down step-by-step.
             - **Storage**: Save to Obsidian + Zotero.
      - **Low Value / Marginal (AI Determined)**:
@@ -48,7 +51,9 @@ Follow these steps strictly for each scholarly tab:
      - *Purpose*: This temporary local file serves as your high-fidelity source of truth. You must use `read_file` on this temp file (using start/end lines if needed) to iteratively extract deep technical nuances for the note, ensuring no detail is missed.
    - **Logic Mapping (Complex Papers)**:
      1. **Skill Activation**: You **MUST** call `activate_skill(name: "mermaid-visualizer")` before drafting any diagram. This ensures the output follows professional aesthetic standards and avoids common syntax pitfalls.
-     2. **Drafting**: Use the instructions from the activated skill to design flowcharts or sequence diagrams. Use Chinese labels for all nodes and edges.
+     2. **Drafting**: Use the instructions from the activated skill to design flowcharts or sequence diagrams. 
+        - **MANDATORY**: All node text within Mermaid diagrams MUST be enclosed in double quotes (e.g., `A["节点文本"]`) to prevent syntax errors.
+        - **Language**: Use Chinese labels for all nodes and edges.
      2. **Incremental Verification (File-Based - MANDATORY)**:
         - **Stage**: Save the Mermaid code to a temporary file: `write_file(path: "<tmp_dir>/{{url_basename}}_diag.mmd", content: "...")`.
         - **Audit**: Run `run_shell_command("mermaid-check <tmp_dir>/{{url_basename}}_diag.mmd")`.
@@ -73,6 +78,7 @@ Follow these steps strictly for each scholarly tab:
 
 ## 3. Storage Standards
 - **Obsidian**: `Library/Papers/{{Title}}.md`
+  - **Naming Rule**: The filename MUST be the paper's full title. Any colons (`:`) in the title MUST be replaced with a middle dot (`·`) (e.g., "Title: Subtitle" -> "Title · Subtitle.md").
 - **Zotero**: Entry must contain Meta-data + PDF Attachment + Markdown Full-text Attachment + Comprehensive Reading Note.
 
 ## 4. Cleanup
