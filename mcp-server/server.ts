@@ -1601,6 +1601,11 @@ Features:
 - Variables: Use {{input.xxx}} for macro input, {{stepOutput.field}} for previous step results
 - Built-ins: "delay" (params: ms), "wait-for-element" (params: tabId, selector/xpath/text, timeout)
 - Conditions: Steps with "condition" are skipped if the condition resolves to falsy
+  - Simple: "{{var}}" (truthy/falsy check)
+  - Expressions: "{{a}} === 'value'", "{{x}} > 10", "{{a}} !== {{b}}"
+  - Logical: "{{x}} > 0 && {{x}} < 100", "{{a}} === 'x' || {{a}} === 'y'"
+  - Methods: "'hello'.includes('ell')", "'abc'.startsWith('a')"
+  - Negation: "!{{var}}"
 - Error handling: "onError" per step — "stop" (default), "skip", or "continue"
 - Recursion: A macro can call execute-macro to run sub-macros (max depth: 10)`,
   {

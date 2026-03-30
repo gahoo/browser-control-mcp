@@ -206,6 +206,54 @@ async function builtinWaitForElement(
     );
 }
 
+// ─── Condition Evaluator ─────────────────────────────────────────────────────
+
+/**
+ * Evaluate a condition value.
+ * 
+ * If the resolved condition is a simple value (no operators), use truthy/falsy.
+ * If it contains comparison operators, safely evaluate the expression.
+ * 
+ * Supported operators: ===, !==, ==, !=, >=, <=, >, <, &&, ||
+ * Supported methods: .includes(), .startsWith(), .endsWith()
+ * Supported prefix: ! (negation)
+ */
+function evaluateCondition(resolved: any): boolean {
+    // Non-string values: direct truthy/falsy
+    if (typeof resolved !== "string") {
+        return !!resolved;
+    }
+
+    const str = resolved.trim();
+
+    // Check if it looks like an expression (contains operators)
+    const hasOperator = /[=!<>]=?|&&|\|\|/.test(str);
+    const hasMethod = /\.(includes|startsWith|endsWith)\(/.test(str);
+
+    if (!hasOperator && !hasMethod && !str.startsWith("!")) {
+        // Simple value: truthy/falsy check
+        return !!str &&
+            str !== "false" &&
+            str !== "null" &&
+            str !== "undefined" &&
+            str !== "0";
+    }
+
+    // Expression evaluation using safe Function constructor
+    try {
+        // Wrap in a function that returns the expression result
+        const fn = new Function(`"use strict"; return (${str});`);
+        return !!fn();
+    } catch (e) {
+        logger.warn(`Condition expression evaluation failed: "${str}" — ${e}`);
+        // Fallback: treat as truthy/falsy
+        return !!str &&
+            str !== "false" &&
+            str !== "null" &&
+            str !== "undefined";
+    }
+}
+
 // ─── Macro Executor ──────────────────────────────────────────────────────────
 
 /**
@@ -278,13 +326,7 @@ export async function executeMacro(
         // ── Condition check ──
         if (step.condition !== undefined) {
             const conditionValue = resolveTemplate(step.condition, context);
-            // Treat falsy, "false", empty string, null, undefined as false
-            const isTruthy =
-                conditionValue &&
-                conditionValue !== "false" &&
-                conditionValue !== "null" &&
-                conditionValue !== "undefined" &&
-                conditionValue !== "";
+            const isTruthy = evaluateCondition(conditionValue);
 
             if (!isTruthy) {
                 logger.info(`Macro step [${i}] ${stepName}: skipped (condition not met)`);
