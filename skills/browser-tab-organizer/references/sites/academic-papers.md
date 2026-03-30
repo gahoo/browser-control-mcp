@@ -18,7 +18,9 @@ When a paper belongs to a **new field** not currently covered by the detailed de
 ## 2. Archival Workflow
 Follow these steps strictly for each scholarly tab:
 
-1. **Focus**: ALWAYS run `switch-to-tab(tabId)` before processing.
+1. **Focus & Pre-processing**: 
+   - ALWAYS run `switch-to-tab(tabId)` before processing.
+   - **PDF Redirection (Mandatory)**: If the current URL ends in **`.pdf`**, you MUST use the **`navigate-url`** tool to redirect the tab to the corresponding HTML abstract or full-text page before proceeding. content extraction tools (like `get-tab-markdown-content`) are NOT supported on raw PDF preview pages.
 2. **Value Assessment (Abstract Audit)**:
    - **Adaptive Extraction**: The Evaluator Agent MUST adjust its strategy based on the page context:
      - **Abstract/Summary Page**: Use `get-tab-markdown-content` (no `cssSelector`).

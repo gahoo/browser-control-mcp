@@ -3,6 +3,8 @@ description: "Combined probe and abstract extraction for bioRxiv evaluation."
 steps:
   - tool: "switch-to-tab"
     params: { tabId: "{{input.tabId}}" }
+  - builtin: "delay"
+    params: { ms: 1500 }
   - tool: "is-tab-loaded"
     params: { tabId: "{{input.tabId}}" }
   - tool: "get-tab-markdown-content"

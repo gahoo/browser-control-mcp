@@ -173,10 +173,13 @@ Both agents MUST follow these rules during the execution phase:
 - **Mandatory Reference Loading**: 
   - Sub-agents MUST call `read_file` to load the relevant site/field guides (e.g., `references/sites/academic-papers.md`) before performing any "Architect-Archivist" tasks. 
   - **Goal**: Ensure the sub-agent is aware of site-specific logic and specialized formatting rules (like Mermaid validation) before processing.
+- **Standardized Temporary Paths**:
+  - ALL temporary assets (including Mermaid `.mmd` files and full-text `.md` dumps) MUST be stored within the **`.gemini/tmp/`** directory relative to the project root. 
+  - **Permission Mandate**: Sub-agents MUST ensure they have write permissions to this directory. Fallback to `run_shell_command` for file creation (e.g., via `echo` or `>`) is STRICTLY PROHIBITED.
 
 - **Token Protection (File-Based Data Flow)**:
-  - The **Extractor/Evaluator Agent** MUST use the `dump` parameter of `get-tab-markdown-content` for any full-text extraction. 
-  - **Constraint**: DO NOT return full-text content as a string variable in tool output. Pass only the **physical file path** to the main agent.
+  - The **Extractor/Evaluator Agent** MUST use the `dump` parameter of `get-tab-markdown-content` to save full-text content directly to `.gemini/tmp/`. 
+  - **Constraint**: DO NOT return full-text content as a string variable in tool output. Pass only the physical file path.
   - The **Archivist Agent** then reads this file directly, preserving the main agent's context window.
 
 - **Descriptive Status Reporting**:
