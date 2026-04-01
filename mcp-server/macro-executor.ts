@@ -6,6 +6,7 @@
  * - Mustache-style variable templates ({{var.field}})
  * - Built-in commands: delay, wait-for-element
  * - Conditional step execution
+ * - Retry/poll: repeat a step until a condition is met (with max retries)
  * - Recursive macro calls (with depth protection)
  * - Error handling strategies per step
  */
@@ -17,6 +18,15 @@ import { ToolRegistry } from "./tool-registry";
 import { logger } from "./logger";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
+
+export interface MacroStepRetry {
+    /** Condition template — step retries until this evaluates to truthy */
+    until: string;
+    /** Maximum number of retries (default: 5) */
+    maxRetries?: number;
+    /** Delay between retries in ms (default: 1000) */
+    interval?: number;
+}
 
 export interface MacroStep {
     /** MCP tool name to call */
@@ -31,6 +41,8 @@ export interface MacroStep {
     condition?: string;
     /** Error handling: "stop" (default), "skip", "continue" */
     onError?: "stop" | "skip" | "continue";
+    /** Retry configuration — repeat this step until a condition is met */
+    retry?: MacroStepRetry;
 }
 
 export interface MacroDefinition {
@@ -349,47 +361,112 @@ export async function executeMacro(
             : {};
         
         try {
-            let result: any;
+            // ── Retry wrapper ──
+            const maxAttempts = step.retry
+                ? (step.retry.maxRetries ?? 5) + 1  // +1 because first attempt is not a "retry"
+                : 1;
+            const retryInterval = step.retry?.interval ?? 1000;
+            let lastError: Error | undefined;
+            let succeeded = false;
 
-            if (step.builtin) {
-                // ── Built-in commands ──
-                switch (step.builtin) {
-                    case "delay":
-                        result = await builtinDelay(resolvedParams);
-                        break;
-                    case "wait-for-element":
-                        result = await builtinWaitForElement(
-                            resolvedParams,
-                            registry
-                        );
-                        break;
-                    default:
-                        throw new Error(
-                            `Unknown builtin: "${step.builtin}". Available: delay, wait-for-element`
-                        );
-                }
-            } else if (step.tool) {
-                // ── MCP tool call ──
-                // Special handling for recursive execute-macro
-                if (step.tool === "execute-macro") {
-                    result = await handleRecursiveMacroCall(
-                        resolvedParams,
-                        registry,
-                        depth
+            for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+                if (step.retry && attempt > 1) {
+                    logger.info(
+                        `Macro step [${i}] ${stepName}: retry ${attempt - 1}/${maxAttempts - 1} after ${retryInterval}ms`
                     );
-                } else {
-                    result = await registry.call(step.tool, resolvedParams);
+                    await new Promise((resolve) => setTimeout(resolve, retryInterval));
+
+                    // Re-resolve params on each retry (they might depend on context)
+                    const retryParams = step.params
+                        ? resolveTemplate(step.params, context)
+                        : {};
+                    Object.assign(resolvedParams, retryParams);
                 }
-            } else {
-                throw new Error(
-                    `Step [${i}]: must specify either "tool" or "builtin"`
-                );
+
+                try {
+                    let result: any;
+
+                    if (step.builtin) {
+                        // ── Built-in commands ──
+                        switch (step.builtin) {
+                            case "delay":
+                                result = await builtinDelay(resolvedParams);
+                                break;
+                            case "wait-for-element":
+                                result = await builtinWaitForElement(
+                                    resolvedParams,
+                                    registry
+                                );
+                                break;
+                            default:
+                                throw new Error(
+                                    `Unknown builtin: "${step.builtin}". Available: delay, wait-for-element`
+                                );
+                        }
+                    } else if (step.tool) {
+                        // ── MCP tool call ──
+                        if (step.tool === "execute-macro") {
+                            result = await handleRecursiveMacroCall(
+                                resolvedParams,
+                                registry,
+                                depth
+                            );
+                        } else {
+                            result = await registry.call(step.tool, resolvedParams);
+                        }
+                    } else {
+                        throw new Error(
+                            `Step [${i}]: must specify either "tool" or "builtin"`
+                        );
+                    }
+
+                    // ── Store output ──
+                    if (step.output) {
+                        context[step.output] = extractToolOutput(result);
+                    }
+
+                    // ── Check retry condition ──
+                    if (step.retry) {
+                        const untilValue = resolveTemplate(step.retry.until, context);
+                        const conditionMet = evaluateCondition(untilValue);
+
+                        if (conditionMet) {
+                            logger.info(
+                                `Macro step [${i}] ${stepName}: retry condition met on attempt ${attempt}`
+                            );
+                            succeeded = true;
+                            break;
+                        } else {
+                            logger.debug(
+                                `Macro step [${i}] ${stepName}: condition not met on attempt ${attempt} (resolved: ${JSON.stringify(untilValue)})`
+                            );
+                            // Continue to next attempt
+                            continue;
+                        }
+                    } else {
+                        // No retry — single execution, we're done
+                        succeeded = true;
+                        break;
+                    }
+                } catch (innerErr) {
+                    lastError = innerErr instanceof Error ? innerErr : new Error(String(innerErr));
+                    if (!step.retry) {
+                        // No retry configured — propagate immediately
+                        throw lastError;
+                    }
+                    logger.warn(
+                        `Macro step [${i}] ${stepName}: attempt ${attempt} threw: ${lastError.message}`
+                    );
+                    // Continue to next retry attempt
+                }
             }
 
-            // ── Store output ──
-            if (step.output) {
-                // For MCP tool results, try to extract meaningful data
-                context[step.output] = extractToolOutput(result);
+            // ── Handle retry exhaustion ──
+            if (!succeeded && step.retry) {
+                const msg = lastError
+                    ? `Retry exhausted after ${maxAttempts} attempts (last error: ${lastError.message})`
+                    : `Retry exhausted after ${maxAttempts} attempts (condition "${step.retry.until}" never met)`;
+                throw new Error(msg);
             }
 
             log.push({

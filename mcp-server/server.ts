@@ -1606,6 +1606,9 @@ Features:
   - Logical: "{{x}} > 0 && {{x}} < 100", "{{a}} === 'x' || {{a}} === 'y'"
   - Methods: "'hello'.includes('ell')", "'abc'.startsWith('a')"
   - Negation: "!{{var}}"
+- Retry/Poll: Add "retry" to any step to repeat until a condition is met:
+    retry: { until: "{{output}} === true", maxRetries: 10, interval: 1000 }
+  The step executes, stores output, then checks the "until" condition. Retries up to maxRetries (default: 5) with interval ms delay (default: 1000).
 - Error handling: "onError" per step — "stop" (default), "skip", or "continue"
 - Recursion: A macro can call execute-macro to run sub-macros (max depth: 10)`,
   {
