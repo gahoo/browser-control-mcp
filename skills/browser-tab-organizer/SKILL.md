@@ -13,6 +13,7 @@ This skill automates the classification, grouping, and resource saving of browse
 - **Prohibited Tool Use**: NEVER call `run_shell_command` with a string that consists only of comments (e.g., `# cleanup`) or performs no functional action.
 - **I/O Purity**: ALWAYS use the built-in `read_file` and `write_file` tools (and their `dump` parameters) for text and file processing. NEVER use shell commands like `cat`, `echo`, or redirection (`>`, `>>`) for file reading or writing.
 - **Efficient Loading**: Do NOT use `sleep` to wait for page loading. Instead, use `is-tab-loaded` iteratively until it returns `true`.
+- **Human Verification Handling**: If a page displays "Attention Required!" or Cloudflare verification, sub-agents MUST stop immediately and notify the user to handle it manually. Do not attempt to bypass or retry automatically.
 
 ### 1. Discovery & Grouping
 - **Scan**: 

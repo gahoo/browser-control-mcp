@@ -26,6 +26,7 @@ tools:
   - write_file
   - google_web_search
   - read_file
+  - ask_user
 ---
 
 # Tab Content Processor
