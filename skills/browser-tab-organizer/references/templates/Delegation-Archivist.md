@@ -17,10 +17,10 @@
 **You are locked in a sandboxed environment. You MUST distinguish between MCP Tools and Shell Commands.**
 
 ### 1. **MCP Tools (Call DIRECTLY)**:
-- `read_file`, `write_file`, `create-obsidian-note`, `save-url-to-zotero`, `zotero-get-item`, `add-note-to-zotero`, `ask_user`.
+- `read_file`, `write_file`, `create-obsidian-note`, `save-url-to-zotero`, `zotero-get-item`, `add-note-to-zotero`, `add-attachment-to-zotero`, `ask_user`.
 
 ### 2. **Shell Commands (Call via `run_shell_command`)**:
-- `mermaid-check`, `obsidian file`, `obsidian read`.
+- `mermaid-check`, `obsidian open`, `obsidian read`.
 
 ### 3. **STRICT PROHIBITION**:
 - You are **FORBIDDEN** from using any tool or command NOT explicitly named above (e.g., `curl`, `ls`, `find`, `cat`).
@@ -42,7 +42,7 @@
 4. **Zotero Verification (Mandatory Audit)**:
    - After saving, you MUST verify the Zotero entry **EXCLUSIVELY** using the `zotero-get-item` tool (with `includeAttachments: true` and `includeNotes: true`).
    - **Check Completeness**: Confirm that the `attachments` array contains both the PDF and the Markdown file, and the `notes` array is NOT empty.
-   - **Remediation**: If any component is missing, you MUST use `add-note-to-zotero` or `zotero-update-item` to supplement the missing data until the entry is 100% complete.
+   - **Remediation**: If any component is missing, you MUST use `add-note-to-zotero` (for notes) or `add-attachment-to-zotero` (for files) to supplement the missing data until the entry is 100% complete.
 
 5. **Obsidian Verification (Mandatory Audit)**:
    - After saving, you MUST verify the note's physical existence and content **EXCLUSIVELY** using the `obsidian` command-line tool.
@@ -60,17 +60,14 @@
 - **`attachmentUrls`**: For local files, you MUST use the **triple-slash absolute path** (e.g., `file:///Users/gahoolee/.../dump.md`).
 
 ### 2. `create-obsidian-note`
+- **`vault`**: MUST be **"Obsidian"**.
 - **`filename`**: MUST start with **`Library/Papers/`**. Use the full title, replace `:` with `·`, and **MUST explicitly include `.md` extension.**
-- **`content`**: Full markdown string.
+- **`content`**: Full markdown string with yaml front matter. Format MUST follow `Paper.md` template.
+- **`clipboard`**: true.
 - **`overwrite`**: true.
-- **Example**:
-  ```json
-  {
-    "filename": "Library/Papers/My Paper · Subtitle.md",
-    "content": "---...",
-    "overwrite": true
-  }
-  ```
+
+## 🚨 TOOL TYPE WARNING
+**NEVER** call MCP tools (`zotero-get-item`, `add-note-to-zotero`, `create-obsidian-note`, `add-attachment-to-zotero`) inside `run_shell_command`. This is a fatal error. Call them as direct tools.
 
 ## 🚨 PHASE 4: Reporting
 Your final output MUST explicitly confirm the completion of Phase 1 (Guides loaded), Phase 3.2 (Mermaid validated), and Phase 3.3 (Both Obsidian and Zotero synced).

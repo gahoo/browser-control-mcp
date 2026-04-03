@@ -1,0 +1,21 @@
+name: "arxiv-abstract-evaluator"
+steps:
+  - name: "Focus & Reload"
+    tool: "reload-browser-tab"
+    params:
+      tabId: "{{input.tabId}}"
+  - builtin: "delay"
+    params: { ms: 2500 }
+  - name: "Probe for HTML link"
+    tool: "find-element"
+    params:
+      tabId: "{{input.tabId}}"
+      query: "HTML (experimental)"
+      mode: "text"
+    onError: "skip"
+  - name: "Capture Abstract"
+    tool: "get-tab-markdown-content"
+    params:
+      tabId: "{{input.tabId}}"
+      cssSelector: "#abstract, .abstract"
+      maxLength: 3000

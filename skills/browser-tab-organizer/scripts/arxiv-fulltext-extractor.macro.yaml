@@ -1,0 +1,25 @@
+name: "arxiv-fulltext-extractor"
+steps:
+  - name: "Focus & Reload"
+    tool: "reload-browser-tab"
+    params:
+      tabId: "{{input.tabId}}"
+  - builtin: "delay"
+    params: { ms: 3000 }
+  - name: "Try clicking HTML version"
+    tool: "click-element"
+    params:
+      tabId: "{{input.tabId}}"
+      textContent: "HTML (experimental)"
+    onError: "skip"
+  - builtin: "delay"
+    params: { ms: 3500 }
+  - name: "Is Content Loaded?"
+    tool: "is-tab-loaded"
+    params:
+      tabId: "{{input.tabId}}"
+  - name: "Extract Markdown Content"
+    tool: "get-tab-markdown-content"
+    params:
+      tabId: "{{input.tabId}}"
+      dump: "{{input.savePath}}"
