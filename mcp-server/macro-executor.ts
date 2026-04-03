@@ -31,8 +31,32 @@ export interface MacroStepRetry {
 export interface MacroStep {
     /** MCP tool name to call */
     tool?: string;
-    /** Built-in command name (delay, wait-for-element) */
+    /** Built-in command name (delay, wait-for-element, set, break) */
     builtin?: string;
+    
+    /** Loop block: repeats steps until condition is met or maxIterations is reached */
+    loop?: {
+        until?: string;
+        maxIterations?: number;
+        steps: MacroStep[];
+    };
+    
+    /** ForEach block: iterates over an array */
+    forEach?: {
+        items: string; // e.g. "{{input.tabIds}}"
+        as?: string;   // Variable name for the current item (default: "item")
+        steps: MacroStep[];
+    };
+    
+    /** Switch block: conditionally execute branches */
+    switch?: {
+        cases: Array<{
+            when?: string;
+            default?: boolean;
+            steps: MacroStep[];
+        }>;
+    };
+
     /** Parameters for the tool/builtin (supports {{template}} variables) */
     params?: Record<string, any>;
     /** Variable name to store the step's output under */
@@ -63,11 +87,13 @@ export interface MacroExecutionResult {
     log: StepLog[];
     /** Error message if failed */
     error?: string;
+    /** Whether a break signal was emitted and bubbled up */
+    breakRequested?: boolean;
 }
 
 interface StepLog {
     index: number;
-    type: "tool" | "builtin";
+    type: "tool" | "builtin" | "control";
     name: string;
     status: "success" | "skipped" | "error";
     durationMs: number;
@@ -105,11 +131,11 @@ function getNestedValue(obj: any, path: string): any {
  */
 function resolveTemplate(value: any, context: Record<string, any>): any {
     if (typeof value === "string") {
-        // Check if the entire string is a single template expression
-        const singleMatch = value.match(/^\{\{(.+?)\}\}$/);
+        // Check if the entire string is a single template expression (no other text, no multiple templates)
+        const singleMatch = value.match(/^\{\{([^}]+)\}\}$/);
         if (singleMatch) {
             const resolved = getNestedValue(context, singleMatch[1].trim());
-            logger.debug(`Template resolved (single): "${value}" ->`, { resolved, type: typeof resolved });
+            // logger.debug(`Template resolved (single): "${value}" ->`, { resolved, type: typeof resolved });
             return resolved; // Return raw value (number, object, etc.)
         }
 
@@ -302,12 +328,14 @@ export function parseMacroDefinition(content: string): MacroDefinition {
  * @param input - External input parameters (accessible via {{input.xxx}})
  * @param registry - Tool registry for calling MCP tools
  * @param depth - Current recursion depth (for protection)
+ * @param parentContext - Existing context to share state with parent executions
  */
 export async function executeMacro(
     definition: MacroDefinition,
     input: Record<string, any>,
     registry: ToolRegistry,
-    depth: number = 0
+    depth: number = 0,
+    parentContext?: Record<string, any>
 ): Promise<MacroExecutionResult> {
     if (depth >= MAX_RECURSION_DEPTH) {
         return {
@@ -320,7 +348,7 @@ export async function executeMacro(
         };
     }
 
-    const context: Record<string, any> = { input };
+    const context: Record<string, any> = parentContext ?? { input };
     const log: StepLog[] = [];
     let stepsExecuted = 0;
     let stepsSkipped = 0;
@@ -332,8 +360,8 @@ export async function executeMacro(
     for (let i = 0; i < definition.steps.length; i++) {
         const step = definition.steps[i];
         const stepStart = Date.now();
-        const stepName = step.tool || step.builtin || "unknown";
-        const stepType = step.builtin ? "builtin" : "tool";
+        const stepName = step.tool || step.builtin || (step.loop ? "loop" : (step.forEach ? "forEach" : (step.switch ? "switch" : "unknown")));
+        const stepType = step.builtin ? "builtin" : (step.tool ? "tool" : "control");
 
         // ── Condition check ──
         if (step.condition !== undefined) {
@@ -368,6 +396,7 @@ export async function executeMacro(
             const retryInterval = step.retry?.interval ?? 1000;
             let lastError: Error | undefined;
             let succeeded = false;
+            let result: any;
 
             for (let attempt = 1; attempt <= maxAttempts; attempt++) {
                 if (step.retry && attempt > 1) {
@@ -384,7 +413,6 @@ export async function executeMacro(
                 }
 
                 try {
-                    let result: any;
 
                     if (step.builtin) {
                         // ── Built-in commands ──
@@ -398,9 +426,18 @@ export async function executeMacro(
                                     registry
                                 );
                                 break;
+                            case "set":
+                                if (resolvedParams.key) {
+                                    context[resolvedParams.key] = resolvedParams.value;
+                                }
+                                result = resolvedParams.value;
+                                break;
+                            case "break":
+                                result = { _breakSignal: true };
+                                break;
                             default:
                                 throw new Error(
-                                    `Unknown builtin: "${step.builtin}". Available: delay, wait-for-element`
+                                    `Unknown builtin: "${step.builtin}". Available: delay, wait-for-element, set, break`
                                 );
                         }
                     } else if (step.tool) {
@@ -414,9 +451,72 @@ export async function executeMacro(
                         } else {
                             result = await registry.call(step.tool, resolvedParams);
                         }
+                    } else if (step.loop) {
+                        // ── Loop block ──
+                        const max = step.loop.maxIterations ?? 1000;
+                        let iteration = 0;
+                        while(iteration < max) {
+                            if (step.loop.until) {
+                                const untilVal = resolveTemplate(step.loop.until, context);
+                                if (evaluateCondition(untilVal)) break;
+                            }
+                            const innerRes = await executeMacro({steps: step.loop.steps}, input, registry, depth + 1, context);
+                            log.push(...innerRes.log);
+                            stepsExecuted += innerRes.stepsExecuted;
+                            stepsSkipped += innerRes.stepsSkipped;
+                            if (innerRes.error) throw new Error(innerRes.error);
+                            if (innerRes.breakRequested) break;
+                            iteration++;
+                        }
+                        result = { iterations: iteration };
+                    } else if (step.forEach) {
+                        // ── ForEach block ──
+                        const items = resolveTemplate(step.forEach.items, context);
+                        if (!Array.isArray(items)) {
+                            throw new Error(`forEach: items must resolve to an array, got ${typeof items}`);
+                        }
+                        const asKey = step.forEach.as || "item";
+                        let iteration = 0;
+                        for (const item of items) {
+                            context[asKey] = item;
+                            const innerRes = await executeMacro({steps: step.forEach.steps}, input, registry, depth + 1, context);
+                            log.push(...innerRes.log);
+                            stepsExecuted += innerRes.stepsExecuted;
+                            stepsSkipped += innerRes.stepsSkipped;
+                            if (innerRes.error) throw new Error(innerRes.error);
+                            if (innerRes.breakRequested) break;
+                            iteration++;
+                        }
+                        result = { iterations: iteration };
+                    } else if (step.switch) {
+                        // ── Switch block ──
+                        let matched = false;
+                        for (const caseBlock of step.switch.cases) {
+                            let isMatch = false;
+                            if (caseBlock.default) {
+                                isMatch = true;
+                            } else if (caseBlock.when) {
+                                const whenVal = resolveTemplate(caseBlock.when, context);
+                                isMatch = evaluateCondition(whenVal);
+                            }
+                            
+                            if (isMatch) {
+                                const innerRes = await executeMacro({steps: caseBlock.steps}, input, registry, depth + 1, context);
+                                log.push(...innerRes.log);
+                                stepsExecuted += innerRes.stepsExecuted;
+                                stepsSkipped += innerRes.stepsSkipped;
+                                if (innerRes.error) throw new Error(innerRes.error);
+                                if (innerRes.breakRequested) {
+                                    result = { _breakSignal: true };
+                                }
+                                matched = true;
+                                break; // Only execute first match
+                            }
+                        }
+                        if (!result) result = { matched };
                     } else {
                         throw new Error(
-                            `Step [${i}]: must specify either "tool" or "builtin"`
+                            `Step [${i}]: must specify tool, builtin, loop, forEach, or switch`
                         );
                     }
 
@@ -471,13 +571,25 @@ export async function executeMacro(
 
             log.push({
                 index: i,
-                type: stepType,
+                type: stepType as any,
                 name: stepName,
                 status: "success",
                 durationMs: Date.now() - stepStart,
                 outputKey: step.output,
             });
             stepsExecuted++;
+
+            // Bubble up break signal if occurred
+            if (result && result._breakSignal) {
+                 return {
+                      success: true,
+                      stepsExecuted,
+                      stepsSkipped,
+                      outputs: extractOutputs(context),
+                      log,
+                      breakRequested: true
+                 };
+            }
         } catch (err) {
             const errorMsg = err instanceof Error ? err.message : String(err);
             const onError = step.onError ?? "stop";

@@ -1599,7 +1599,7 @@ Macro definition format (YAML):
 
 Features:
 - Variables: Use {{input.xxx}} for macro input, {{stepOutput.field}} for previous step results
-- Built-ins: "delay" (params: ms), "wait-for-element" (params: tabId, selector/xpath/text, timeout)
+- Built-ins: "delay", "wait-for-element", "set" (key, value), "break" (exits inner loop/forEach)
 - Conditions: Steps with "condition" are skipped if the condition resolves to falsy
   - Simple: "{{var}}" (truthy/falsy check)
   - Expressions: "{{a}} === 'value'", "{{x}} > 10", "{{a}} !== {{b}}"
@@ -1609,6 +1609,10 @@ Features:
 - Retry/Poll: Add "retry" to any step to repeat until a condition is met:
     retry: { until: "{{output}} === true", maxRetries: 10, interval: 1000 }
   The step executes, stores output, then checks the "until" condition. Retries up to maxRetries (default: 5) with interval ms delay (default: 1000).
+- Structural Blocks:
+  - loop: { until?: "condition", maxIterations?: 1000, steps: [...] }
+  - forEach: { items: "{{input.array}}", as: "item", steps: [...] }
+  - switch: { cases: [ { when: "condition", steps: [...] }, { default: true, steps: [...] } ] }
 - Error handling: "onError" per step — "stop" (default), "skip", or "continue"
 - Recursion: A macro can call execute-macro to run sub-macros (max depth: 10)`,
   {
