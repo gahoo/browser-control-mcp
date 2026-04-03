@@ -771,7 +771,138 @@ Requires Better BibTeX debug-bridge and ZOTERO_DEBUG_BRIDGE_TOKEN env var.`,
             },
         },
 
-        // ─── Tool 5: zotero-search ───────────────────────────────────────
+        // ─── Tool 5: add-attachment-to-zotero (via debug-bridge) ─────────
+        {
+            name: "add-attachment-to-zotero",
+            description: `Add an attachment to an existing item in the Zotero library.
+Supports four attachment modes:
+- "imported_file": Copies a local file into Zotero storage (default for files)
+- "linked_file": Links to a file on disk without copying
+- "imported_url": Downloads a file from a URL and stores it in Zotero
+- "linked_url": Saves a web link as an attachment
+
+Requires Better BibTeX debug-bridge and ZOTERO_DEBUG_BRIDGE_TOKEN env var.`,
+            schema: z.object({
+                parentItem: z.string()
+                    .describe("The key of the parent item (8-char alphanumeric, e.g. 'ABCD1234')"),
+                url: z.string().optional()
+                    .describe("URL to attach (required for imported_url and linked_url modes)"),
+                path: z.string().optional()
+                    .describe("Local file path (required for imported_file and linked_file modes)"),
+                title: z.string().optional()
+                    .describe("Title for the attachment (defaults to filename or URL)"),
+                mimeType: z.string().optional()
+                    .describe("MIME type (e.g. 'application/pdf'). Auto-detected if omitted for file modes."),
+                linkMode: z.enum(["imported_file", "linked_file", "imported_url", "linked_url"])
+                    .default("imported_url")
+                    .describe("Attachment type: imported_file, linked_file, imported_url, linked_url"),
+            }),
+            handler: async ({ parentItem, url, path, title, mimeType, linkMode }, ctx) => {
+                ctx.logger.info(`Adding attachment to ${parentItem}: mode=${linkMode}`);
+
+                let script: string;
+
+                if (linkMode === "imported_file" || linkMode === "linked_file") {
+                    if (!path) {
+                        return {
+                            content: [{
+                                type: "text" as const,
+                                text: `Error: 'path' is required for ${linkMode} mode.`,
+                                isError: true,
+                            }],
+                        };
+                    }
+                    const method = linkMode === "imported_file"
+                        ? "importFromFile"
+                        : "linkFromFile";
+                    script = [
+                        `var libraryID = Zotero.Libraries.userLibraryID;`,
+                        `var parentID = Zotero.Items.getIDFromLibraryAndKey(libraryID, ${JSON.stringify(parentItem)});`,
+                        `if (!parentID) throw new Error('Parent item not found: ' + ${JSON.stringify(parentItem)});`,
+                        `var att = await Zotero.Attachments.${method}({`,
+                        `  file: ${JSON.stringify(path)},`,
+                        `  parentItemID: parentID,`,
+                        title ? `  title: ${JSON.stringify(title)},` : "",
+                        `});`,
+                        `var item = typeof att === 'number' ? Zotero.Items.get(att) : att;`,
+                        `return { key: item.key, title: item.getDisplayTitle(),`,
+                        `  contentType: item.attachmentContentType, filename: item.attachmentFilename,`,
+                        `  linkMode: ${JSON.stringify(linkMode)} };`,
+                    ].filter(Boolean).join("\n");
+                } else if (linkMode === "imported_url") {
+                    if (!url) {
+                        return {
+                            content: [{
+                                type: "text" as const,
+                                text: `Error: 'url' is required for imported_url mode.`,
+                                isError: true,
+                            }],
+                        };
+                    }
+                    script = [
+                        `var libraryID = Zotero.Libraries.userLibraryID;`,
+                        `var parentID = Zotero.Items.getIDFromLibraryAndKey(libraryID, ${JSON.stringify(parentItem)});`,
+                        `if (!parentID) throw new Error('Parent item not found: ' + ${JSON.stringify(parentItem)});`,
+                        `var att = await Zotero.Attachments.importFromURL({`,
+                        `  url: ${JSON.stringify(url)},`,
+                        `  parentItemID: parentID,`,
+                        title ? `  title: ${JSON.stringify(title)},` : "",
+                        mimeType ? `  contentType: ${JSON.stringify(mimeType)},` : "",
+                        `});`,
+                        `var item = typeof att === 'number' ? Zotero.Items.get(att) : att;`,
+                        `return { key: item.key, title: item.getDisplayTitle(),`,
+                        `  contentType: item.attachmentContentType, linkMode: 'imported_url' };`,
+                    ].filter(Boolean).join("\n");
+                } else {
+                    // linked_url
+                    if (!url) {
+                        return {
+                            content: [{
+                                type: "text" as const,
+                                text: `Error: 'url' is required for linked_url mode.`,
+                                isError: true,
+                            }],
+                        };
+                    }
+                    script = [
+                        `var libraryID = Zotero.Libraries.userLibraryID;`,
+                        `var parentID = Zotero.Items.getIDFromLibraryAndKey(libraryID, ${JSON.stringify(parentItem)});`,
+                        `if (!parentID) throw new Error('Parent item not found: ' + ${JSON.stringify(parentItem)});`,
+                        `var att = await Zotero.Attachments.linkFromURL({`,
+                        `  url: ${JSON.stringify(url)},`,
+                        `  parentItemID: parentID,`,
+                        title ? `  title: ${JSON.stringify(title)},` : "",
+                        mimeType ? `  contentType: ${JSON.stringify(mimeType)},` : "",
+                        `});`,
+                        `var item = typeof att === 'number' ? Zotero.Items.get(att) : att;`,
+                        `return { key: item.key, title: item.getDisplayTitle(),`,
+                        `  contentType: item.attachmentContentType, linkMode: 'linked_url' };`,
+                    ].filter(Boolean).join("\n");
+                }
+
+                const result = await debugBridgeFetch(script);
+
+                if (!result.ok) {
+                    return {
+                        content: [{
+                            type: "text" as const,
+                            text: `Failed to add attachment. ${bridgeErrorText(result)}`,
+                            isError: true,
+                        }],
+                    };
+                }
+
+                const data = result.data as Record<string, unknown>;
+                return {
+                    content: [{
+                        type: "text" as const,
+                        text: `Successfully added attachment to item ${parentItem}.\nAttachment key: ${data.key}\nTitle: ${data.title}\nType: ${data.contentType}\nMode: ${data.linkMode}`,
+                    }],
+                };
+            },
+        },
+
+        // ─── Tool 6: zotero-search ───────────────────────────────────────
         {
             name: "zotero-search",
             description: `Search for items in the Zotero library. Supports searching by title, author, tag, collection, item type, and date range.
