@@ -9,6 +9,7 @@
    - `browser-tab-organizer`
    - `obsidian-markdown`
    - `mermaid-visualizer`
+   - `obsidian-cli`
 2. **Load Workflow Guide**: Call `read_file` to load `/Users/gahoolee/Codes/Javascript/browser-control-mcp/skills/browser-tab-organizer/references/sites/academic-papers.md`.
 3. **Load Target Template**: Call `read_file` to load `/Users/gahoolee/Codes/Javascript/browser-control-mcp/skills/browser-tab-organizer/references/templates/Paper.md`.
 4. **Load Domain Guide**: Call `read_file` to load the domain-specific guide (e.g., `biorxiv.org.md` or `arxiv.org.md`) if applicable.
@@ -32,6 +33,7 @@
 ## 🚨 PHASE 3: Compliance & Archival Execution
 **Execute these steps strictly. Do not skip or merge.**
 1. **Obsidian Drafting**: Format the extracted data strictly according to ALL 0-7 sections of `Paper.md`.
+   - **MANDATORY**: In Section 2 (Key Figures), you MUST ensure all `![]()` tags contain valid image URLs. Do NOT leave empty placeholders. Ensure 'Image Activation' via macro was successful.
 2. **Mermaid Audit (Mandatory Gate)**:
    - Create diagram logic (MUST enclose all node texts in double quotes: `A["Node Text"]`).
    - Call `write_file` to save it as `.gemini/tmp/<filename>_diag.mmd`.

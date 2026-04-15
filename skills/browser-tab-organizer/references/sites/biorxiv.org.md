@@ -24,7 +24,7 @@ When constructing a new URL from the current tab URL:
 2.  Append the target suffix (`.full-text` for HTML extraction or `.full.pdf` for Zotero attachment).
 
 ## 3. Archival Workflow
-Follow the [Academic Paper Archival](academic-papers.md) workflow.
+Follow the [Academic Paper Archival](academic-papers.md) workflow, specifically the **Distributed Execution & Audit (The "Three Powers" Architecture)** for executing tasks.
 
 ### 3.1 Operator-Extractor Stage
 Choose the appropriate method based on the execution mode:

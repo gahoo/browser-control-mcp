@@ -78,6 +78,33 @@ Follow these steps strictly for each scholarly tab:
        4. **本文局限性 (Limitations)**: Critical evaluation of weaknesses and boundaries.
 4. **Cleanup**: Close the tab after both Obsidian and Zotero confirmations.
 
+### 2.3 Distributed Execution & Audit (The "Three Powers" Architecture)
+When processing in **Distributed Mode (Option B/D)**, the following sub-agent roles MUST be used:
+
+1. **The Archivist (Maker)**:
+   - **Contract**: Load and strictly follow `Delegation-Archivist.md`.
+   - **Task**: Perform content extraction, drafting, and dual-sync (Zotero & Obsidian).
+   - **Engagement**: MUST perform the Interactive Q&A (Phase 4 of protocol) before handover.
+
+2. **The Verifier (Auditor)**:
+   - **Contract**: Load and strictly follow `Delegation-Verifier.md`.
+   - **Task**: Perform a non-destructive physical audit of the Archivist's output.
+   - **Output**: Report a structured JSON indicating PASS/FAIL.
+
+3. **The Orchestrator (Main Agent)**:
+   - Evaluates the Verifier's report and dispatches a **Remediator** for specific FAIL items.
+
+### 2.4 Fallback: Direct PDF Archival (No HTML Version)
+If a paper lacks an experimental HTML view (e.g., bioRxiv conversion failure or arXiv PDF-only), follow this high-fidelity fallback path:
+
+1.  **Download PDF**: Use `fetch-url` to download the PDF to `.gemini/tmp/{id}.pdf`.
+2.  **Size Check**: Verify that the file size is **under 5MB** to ensure context safety.
+3.  **Direct Read**: Use the `read_file` tool to read the physical PDF file. This allows the sub-agent to analyze the full text even without a Markdown dump.
+4.  **Zotero Archival**: 
+    - Sync metadata using `save-url-to-zotero`.
+    - **MANDATORY**: Attach the **local PDF file** using the triple-slash absolute path (`file:///Users/gahoolee/.../tmp/{id}.pdf`).
+5.  **Obsidian Archival**: Generate the note based on the PDF content following the `Paper.md` template.
+
 ## 3. Storage Standards
 - **Obsidian**: `Library/Papers/{{Title}}.md`
   - **Naming Rule**: The filename MUST be the paper's full title. Any colons (`:`) in the title MUST be replaced with a middle dot (`·`) (e.g., "Title: Subtitle" -> "Title · Subtitle.md").

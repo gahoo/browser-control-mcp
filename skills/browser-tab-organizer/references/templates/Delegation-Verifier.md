@@ -5,7 +5,10 @@
 
 ## 🚨 PHASE 1: Mandatory Environment Setup
 **You MUST perform these steps before any analysis.**
-1. **Load Target Template**: Call `read_file` to load `/Users/gahoolee/Codes/Javascript/browser-control-mcp/skills/browser-tab-organizer/references/templates/Paper.md`.
+1. **Activate Skills**: Call `activate_skill` for:
+   - `obsidian-cli`
+   - `browser-tab-organizer`
+2. **Load Target Template**: Call `read_file` to load `/Users/gahoolee/Codes/Javascript/browser-control-mcp/skills/browser-tab-organizer/references/templates/Paper.md`.
 
 ## 🚨 PHASE 2: Exclusive Tool Environment (Strict Enforcement)
 **You are locked in a sandboxed verification environment. You MUST distinguish between MCP Tools and Shell Commands.**
@@ -35,9 +38,11 @@
 
 ### 2. Obsidian Verification
 - **Action**: Run `run_shell_command("obsidian open file='<relative_path_to_note>'")` followed by `run_shell_command("obsidian read <relative_path_to_note>")`.
+- **Search Rule**: Use `run_shell_command("obsidian search query='<query>'")` if searching is required.
 - **Check Compliance**: 
   - Confirm the note physically exists.
   - Scan the output to ensure ALL 0-7 sections from `Paper.md` are present.
+  - **IMAGE AUDIT**: Specifically check Section 2 (Key Figures). If any `![]()` exists without a URL, report a **FAIL** for "Empty Image Links".
   - Ensure YAML frontmatter exists and is valid.
   - **Identify Reason**: If failed, specify if it's "File Not Found", "Corrupted Formatting", "Missing Sections [X, Y]", or "Invalid Vault".
 

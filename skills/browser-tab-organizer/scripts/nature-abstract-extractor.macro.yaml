@@ -1,0 +1,54 @@
+name: "nature-abstract-extractor"
+steps:
+  - name: "Focus"
+    tool: "switch-to-tab"
+    params:
+      tabId: "{{input.tabId}}"
+
+  - name: "Wait for Page Load"
+    tool: "is-tab-loaded"
+    params:
+      tabId: "{{input.tabId}}"
+    retry:
+      until: "{{output}} === true"
+      maxRetries: 10
+      interval: 2000
+
+  - builtin: "delay"
+    params: { ms: 3000 }
+
+  - name: "Identify Access & Content Level"
+    tool: "execute-script"
+    params:
+      tabId: "{{input.tabId}}"
+      script: |
+        (function() {
+          // 1. 探测 PDF 下载按钮 (最高权重信号：只要有 PDF 下载，必有全文权限)
+          const pdfDownloadBox = document.querySelector('.c-pdf-download, .js-pdf-download');
+          if (pdfDownloadBox) return "FULL_TEXT";
+
+          // 2. 探测机构无权限明确提示 (次高权重信号)
+          const noAccessMsg = document.querySelector('[data-test="access-message"]');
+          if (noAccessMsg && noAccessMsg.innerText.includes('is not available')) {
+            return "ABSTRACT_ONLY";
+          }
+
+          // 3. 兜底逻辑：检查正文主要章节标题 (Results/Methods/Discussion)
+          const bodyText = document.body.innerText;
+          const hasFullSections = /Results\n|Discussion\n|Methods\n/i.test(bodyText);
+          const hasPaywallTeaser = /Access options|This is a preview of subscription content/i.test(bodyText);
+
+          if (hasFullSections) return "FULL_TEXT";
+          if (hasPaywallTeaser) return "ABSTRACT_ONLY";
+
+          return "UNKNOWN";
+        })()
+    output: "access_level"
+
+  - name: "Capture Abstract Content"
+    tool: "get-tab-markdown-content"
+    params:
+      tabId: "{{input.tabId}}"
+      cssSelector: "#abstract-content, .abstract-content, .c-article-section__content"
+      dump: "{{input.dumpPath}}"
+    onError: "stop"

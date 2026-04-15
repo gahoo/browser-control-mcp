@@ -15,7 +15,7 @@ Use these specific selectors for surgical data extraction:
 - **Full Text Button**: `textContent: "HTML (experimental)"`
 
 ## 3. Archival Workflow
-Follow the [Academic Paper Archival](academic-papers.md) workflow.
+Follow the [Academic Paper Archival](academic-papers.md) workflow, specifically the **Distributed Execution & Audit (The "Three Powers" Architecture)** for executing tasks.
 
 ### 3.1 Operator-Extractor Stage (Macro-Driven)
 - **Phase 1: Probe (Abstract/HTML Entrance)**

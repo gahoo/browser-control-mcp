@@ -1,0 +1,20 @@
+name: "nature-fulltext-extractor"
+steps:
+  - name: "Image Activation"
+    tool: "execute-script"
+    params:
+      tabId: "{{input.tabId}}"
+      script: |
+        document.querySelectorAll('img[data-src]').forEach(img => {
+          if (img.getAttribute('data-src')) {
+            img.src = img.getAttribute('data-src');
+          }
+        });
+
+  - name: "Extract Full Text"
+    tool: "get-tab-markdown-content"
+    params:
+      tabId: "{{input.tabId}}"
+      cssSelector: "main"
+      dump: "{{input.savePath}}"
+    onError: "stop"
