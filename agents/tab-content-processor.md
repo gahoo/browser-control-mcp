@@ -18,6 +18,11 @@ tools:
   - mcp_browser-control_query-open-tabs
   - mcp_browser-control_switch-to-tab
   - mcp_browser-control_save-url-to-zotero
+  - mcp_browser-control_zotero-get-item
+  - mcp_browser-control_zotero-search
+  - mcp_browser-control_add-note-to-zotero
+  - mcp_browser-control_add-attachment-to-zotero
+  - mcp_browser-control_zotero-ping
   - mcp_browser-control_save-to-pastebin
   - mcp_browser-control_fetch-url
   - mcp_browser-control_install-media-interceptor
