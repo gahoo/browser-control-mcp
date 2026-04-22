@@ -1,0 +1,13 @@
+name: "cell-fulltext-extractor"
+steps:
+  - name: "Extract Full Text"
+    tool: "get-tab-markdown-content"
+    params:
+      tabId: "{{input.tabId}}"
+      # Cell 全文容器
+      cssSelector: "main, article, .article-wrapper, #body-content"
+      mask:
+        behavior: "remove"
+        elements: [".article-section__references", ".references", "#section-references"]
+      dump: "{{input.savePath}}"
+    onError: "stop"

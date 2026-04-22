@@ -1,4 +1,4 @@
-name: "nature-abstract-extractor"
+name: "oup-abstract-extractor"
 steps:
   - name: "Focus"
     tool: "switch-to-tab"
@@ -23,17 +23,13 @@ steps:
       tabId: "{{input.tabId}}"
       script: |
         (function() {
-          const pdfDownloadBox = document.querySelector('.c-pdf-download, .js-pdf-download');
-          if (pdfDownloadBox) return "FULL_TEXT";
-          const noAccessMsg = document.querySelector('[data-test="access-message"]');
-          if (noAccessMsg && noAccessMsg.innerText.includes('is not available')) {
-            return "ABSTRACT_ONLY";
-          }
           const bodyText = document.body.innerText;
-          const hasFullSections = /Results\n|Discussion\n|Methods\n/i.test(bodyText);
-          const hasPaywallTeaser = /Access options|This is a preview of subscription content/i.test(bodyText);
+          const pdfLink = document.querySelector('.article-pdf-link, .download-pdf, a[href*="/article-pdf/"]');
+          if (pdfLink) return "FULL_TEXT";
+          const hasFullSections = /Introduction\n|Results\n|Methods\n|Discussion\n/i.test(bodyText);
           if (hasFullSections) return "FULL_TEXT";
-          if (hasPaywallTeaser) return "ABSTRACT_ONLY";
+          const hasPurchase = !!document.querySelector('.purchase-reg-box, .purchase-article, .at-article-purchase-options');
+          if (hasPurchase) return "ABSTRACT_ONLY";
           return "UNKNOWN";
         })()
     output: "access_level"
@@ -42,6 +38,6 @@ steps:
     tool: "get-tab-markdown-content"
     params:
       tabId: "{{input.tabId}}"
-      cssSelector: "#abstract-content, .abstract-content, .c-article-section__content"
+      cssSelector: ".abstract, #abstract, section[data-sb-object-type='abstract']"
       # 不使用 dump，直接返回内容
     onError: "stop"

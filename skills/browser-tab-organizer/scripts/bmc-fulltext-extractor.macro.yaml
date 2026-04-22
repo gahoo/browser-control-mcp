@@ -1,0 +1,24 @@
+name: "bmc-fulltext-extractor"
+steps:
+  - name: "Image Activation"
+    tool: "execute-script"
+    params:
+      tabId: "{{input.tabId}}"
+      script: |
+        document.querySelectorAll('img[data-src]').forEach(img => {
+          if (img.getAttribute('data-src')) {
+            img.src = img.getAttribute('data-src');
+          }
+        });
+
+  - name: "Extract Full Text"
+    tool: "get-tab-markdown-content"
+    params:
+      tabId: "{{input.tabId}}"
+      # 使用 main 正文容器并移除参考文献
+      cssSelector: "main, article, #main-content"
+      mask:
+        behavior: "remove"
+        elements: [".c-article-references", "#Bib1-section"]
+      dump: "{{input.savePath}}"
+    onError: "stop"

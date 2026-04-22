@@ -1,0 +1,42 @@
+name: "bmc-abstract-extractor"
+steps:
+  - name: "Focus"
+    tool: "switch-to-tab"
+    params:
+      tabId: "{{input.tabId}}"
+
+  - name: "Wait for Page Load"
+    tool: "is-tab-loaded"
+    params:
+      tabId: "{{input.tabId}}"
+    retry:
+      until: "{{output}} === true"
+      maxRetries: 10
+      interval: 2000
+
+  - builtin: "delay"
+    params: { ms: 3000 }
+
+  - name: "Identify Access & Content Level"
+    tool: "execute-script"
+    params:
+      tabId: "{{input.tabId}}"
+      script: |
+        (function() {
+          // BMC 是 OA 期刊，PDF 下载按钮是最高权重信号
+          const pdfBtn = document.querySelector('.c-pdf-download, .js-pdf-download, a[data-test="pdf-link"]');
+          if (pdfBtn) return "FULL_TEXT";
+
+          const hasFullSections = /Introduction\n|Results\n|Methods\n|Discussion\n/i.test(document.body.innerText);
+          if (hasFullSections) return "FULL_TEXT";
+
+          return "ABSTRACT_ONLY";
+        })()
+    output: "access_level"
+
+  - name: "Capture Abstract Content"
+    tool: "get-tab-markdown-content"
+    params:
+      tabId: "{{input.tabId}}"
+      cssSelector: "#Abs1-content, .c-article-section__content, .abstract-content"
+    onError: "stop"

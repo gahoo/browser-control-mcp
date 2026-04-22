@@ -1,0 +1,12 @@
+name: "oup-fulltext-extractor"
+steps:
+  - name: "Extract Full Text"
+    tool: "get-tab-markdown-content"
+    params:
+      tabId: "{{input.tabId}}"
+      dump: "{{input.savePath}}"
+      # 不指定 cssSelector 以启用自动识别
+      mask:
+        behavior: "remove"
+        elements: [".ref-list"]
+    onError: "stop"

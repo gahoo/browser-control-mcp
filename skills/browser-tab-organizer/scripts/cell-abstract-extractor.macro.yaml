@@ -1,0 +1,48 @@
+name: "cell-abstract-extractor"
+steps:
+  - name: "Focus"
+    tool: "switch-to-tab"
+    params:
+      tabId: "{{input.tabId}}"
+
+  - name: "Wait for Page Load"
+    tool: "is-tab-loaded"
+    params:
+      tabId: "{{input.tabId}}"
+    retry:
+      until: "{{output}} === true"
+      maxRetries: 10
+      interval: 2000
+
+  - builtin: "delay"
+    params: { ms: 3000 }
+
+  - name: "Identify Access & Content Level"
+    tool: "execute-script"
+    params:
+      tabId: "{{input.tabId}}"
+      script: |
+        (function() {
+          const bodyText = document.body.innerText;
+          
+          // 1. 探测 PDF 下载按钮 (强信号)
+          const pdfBtn = document.querySelector('.pdf-download, .download-pdf, .article-tools__item__pdf, a[href*="/pdf/"]');
+          if (pdfBtn) return "FULL_TEXT";
+
+          // 2. 探测 STAR Methods (Cell 特有强信号)
+          if (/STAR.*Methods/i.test(bodyText) || /Results\n/i.test(bodyText)) return "FULL_TEXT";
+
+          // 3. 探测登录限制
+          const paywall = document.querySelector('.article-access-options, .login-to-access, .purchase-access');
+          if (paywall) return "ABSTRACT_ONLY";
+
+          return "UNKNOWN";
+        })()
+    output: "access_level"
+
+  - name: "Capture Summary Content"
+    tool: "get-tab-markdown-content"
+    params:
+      tabId: "{{input.tabId}}"
+      cssSelector: ".article-section__abstract, #abstract, .abstract, section[data-sb-object-type='abstract']"
+    onError: "stop"
